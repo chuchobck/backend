@@ -10,7 +10,7 @@ export const helmetMiddleware = helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'https:', 'http://localhost:3000', 'http://localhost:3001'],
+      imgSrc: ["'self'", 'data:', 'https:', 'http:', 'blob:'],
     },
   },
   crossOriginResourcePolicy: { policy: 'cross-origin' },  // Permitir recursos cross-origin
