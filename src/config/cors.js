@@ -12,9 +12,16 @@ const allowedOrigins = [
   "https://barbox.vercel.app",
   // Frontend en Vercel proporcionado
   "https://e-commerce-nu-three-87.vercel.app",
+  // Nuevos dominios de Vercel (previews y producción)
+  "https://e-commerce-mbcyrqxt0-chuchos-projects-4630041d.vercel.app",
   // Agregar más dominios según necesites
   process.env.FRONTEND_URL,  // Variable de entorno opcional
 ].filter(Boolean);  // Elimina valores undefined/null
+
+// Permitir todos los subdominios de vercel.app del proyecto
+const isVercelPreview = (origin) => {
+  return origin && origin.match(/^https:\/\/e-commerce.*\.vercel\.app$/);
+};
 
 // Función para validar origen (permite IPs de red local)
 const validateOrigin = (origin, callback) => {
@@ -25,6 +32,11 @@ const validateOrigin = (origin, callback) => {
 
   // Permitir orígenes en la lista
   if (allowedOrigins.includes(origin)) {
+    return callback(null, true);
+  }
+
+  // Permitir cualquier preview de Vercel del proyecto e-commerce
+  if (isVercelPreview(origin)) {
     return callback(null, true);
   }
 
