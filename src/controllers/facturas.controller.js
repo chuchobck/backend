@@ -29,16 +29,45 @@ export const listarFacturas = async (req, res, next) => {
 /**
  * F5.4.2 – Consulta de facturas por parámetros
  * GET /api/v1/facturas/buscar
+ * Búsqueda unificada por: id, cliente, fechas, estado
  */
 export const buscarFacturas = async (req, res, next) => {
   try {
-    const { cliente, fechaDesde, fechaHasta, estado } = req.query;
+    const { id, cliente, fechaDesde, fechaHasta, estado } = req.query;
 
-    // E5 – Parámetros faltantes
+    // Si se busca por ID, usar findUnique con detalle completo
+    if (id) {
+      const factura = await prisma.factura.findUnique({
+        where: { id_factura: id },
+        include: {
+          cliente: true,
+          detalle_factura: {
+            include: { producto: true }
+          },
+          iva: true
+        }
+      });
+
+      if (!factura) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'La factura no existe.',
+          data: null
+        });
+      }
+
+      return res.json({
+        status: 'success',
+        message: 'Factura obtenida correctamente',
+        data: factura
+      });
+    }
+
+    // E5 – Parámetros faltantes (solo si no hay ID)
     if (!cliente && !fechaDesde && !fechaHasta && !estado) {
       return res.status(400).json({
         status: 'error',
-        message: 'Ingrese criterios.',
+        message: 'Ingrese al menos un criterio de búsqueda (cliente, fechas o estado)',
         data: null
       });
     }
@@ -79,7 +108,7 @@ export const buscarFacturas = async (req, res, next) => {
     if (facturas.length === 0) {
       return res.status(404).json({
         status: 'error',
-        message: 'No se encontraron facturas.',
+        message: 'No se encontraron facturas con los criterios especificados.',
         data: []
       });
     }
@@ -96,55 +125,8 @@ export const buscarFacturas = async (req, res, next) => {
 };
 
 /**
- * Obtener factura con detalle
- * GET /api/v1/facturas/:id
- */
-export const obtenerFactura = async (req, res, next) => {
-  try {
-    const id = req.params.id; // ID es VARCHAR (FAC0001)
-
-    if (!id) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'ID de factura es requerido',
-        data: null
-      });
-    }
-
-    const factura = await prisma.factura.findUnique({
-      where: { id_factura: id },
-      include: {
-        cliente: true,
-        detalle_factura: {
-          include: { producto: true }
-        },
-        iva: true
-      }
-    });
-
-    // E2 – Factura inexistente
-    if (!factura) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'La factura no existe.',
-        data: null
-      });
-    }
-
-    return res.json({
-      status: 'success',
-      message: 'Factura obtenida correctamente',
-      data: factura
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-/**
  * F5.1 – Ingreso de factura (Local / Online)
  * POST /api/v1/facturas
- * 
  * Body esperado:
  * {
  *   "clienteId": "CLI0001",
@@ -155,12 +137,6 @@ export const obtenerFactura = async (req, res, next) => {
  *   "canal": "POS" | "WEB",
  *   "pedidoId": "PED0001" | null
  * }
- *
- * Notas:
- * - Si se envía pedidoId, se ignoran los detalles manuales y se toman del pedido.
- * - Se valida existencia del pedido, cliente, pagos y que no tenga factura.
- * - Factura se asocia al pedido y actualiza estado.
- * - Si canal = WEB, se puede enviar email (opcional).
  */
 export const crearFactura = async (req, res, next) => {
   try {
@@ -191,15 +167,15 @@ export const crearFactura = async (req, res, next) => {
         }
       });
 
-      console.log('🔍 Pedido encontrado:', pedido?.id_pedido);
-      console.log('🔍 Total pagos:', pedido?.pago?.length);
+      console.log(' Pedido encontrado:', pedido?.id_pedido);
+      console.log(' Total pagos:', pedido?.pago?.length);
 
       if (!pedido) {
         return res.status(404).json({ status: 'error', message: 'Pedido no existe', error_code: 'E8', data: null });
       }
 
       if (pedido.id_cliente && pedido.id_cliente !== clienteId) {
-        console.log('❌ Cliente no coincide. Pedido:', pedido.id_cliente, 'Request:', clienteId);
+        console.log(' Cliente no coincide. Pedido:', pedido.id_cliente, 'Request:', clienteId);
         return res.status(400).json({ status: 'error', message: 'Pedido no pertenece al cliente', error_code: 'E8', data: null });
       }
 
@@ -432,7 +408,6 @@ export const anularFactura = async (req, res, next) => {
 export const imprimirFactura = async (req, res, next) => {
   try {
     const id = req.params.id; // ID es VARCHAR (FAC0001)
-
     if (!id) {
       return res.status(400).json({
         status: 'error',
@@ -440,7 +415,6 @@ export const imprimirFactura = async (req, res, next) => {
         data: null
       });
     }
-
     const factura = await prisma.factura.findUnique({
       where: { id_factura: id },
       include: {
@@ -453,7 +427,6 @@ export const imprimirFactura = async (req, res, next) => {
         iva: true
       }
     });
-
     // E2 – Factura inexistente
     if (!factura) {
       return res.status(404).json({
@@ -462,7 +435,6 @@ export const imprimirFactura = async (req, res, next) => {
         data: null
       });
     }
-
     // Formatear datos para impresión
     const datosImpresion = {
       // Datos de la factura
@@ -475,8 +447,7 @@ export const imprimirFactura = async (req, res, next) => {
         'ANU': 'ANULADA',
         'PEN': 'PENDIENTE'
       }[factura.estado] || factura.estado,
-      
-      // Datos del cliente
+   
       cliente: {
         identificacion: factura.cliente.ruc_cedula,
         nombre_completo: `${factura.cliente.nombre1} ${factura.cliente.nombre2 || ''} ${factura.cliente.apellido1} ${factura.cliente.apellido2 || ''}`.trim(),
@@ -486,7 +457,6 @@ export const imprimirFactura = async (req, res, next) => {
         ciudad: factura.cliente.ciudad?.descripcion
       },
       
-      // Detalles de productos
       detalles: factura.detalle_factura.map((d, idx) => ({
         linea: idx + 1,
         codigo: d.id_producto,
@@ -515,48 +485,6 @@ export const imprimirFactura = async (req, res, next) => {
     next(err);
   }
 };
-
-/**
- * GET /api/v1/facturas/cliente/:id_cliente
- * Obtener todas las facturas de un cliente específico
- * Usado por: E-commerce (ver historial de compras)
- */
-export const obtenerFacturasCliente = async (req, res, next) => {
-  try {
-    const { id_cliente } = req.params;
-
-    if (!id_cliente) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'ID de cliente es requerido',
-        data: null
-      });
-    }
-
-    const facturas = await prisma.factura.findMany({
-      where: { 
-        id_cliente: id_cliente,
-        estado: { not: 'ANU' } // No mostrar anuladas
-      },
-      include: {
-        iva: true,
-        detalle_factura: {
-          include: { producto: true }
-        }
-      },
-      orderBy: { fecha: 'desc' }
-    });
-
-    return res.json({
-      status: 'success',
-      message: 'Facturas del cliente obtenidas correctamente',
-      data: facturas
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
 
 /**
  * PUT /api/v1/facturas/:id/modificar

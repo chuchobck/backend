@@ -1,6 +1,4 @@
-// src/controllers/clientes.controller.js
-// 🟢 PERSONA 2: Módulo F4 - Gestión de Clientes
-
+//Módulo F4 - Gestión de Clientes
 import prisma from '../config/database.js';
 
 /**
@@ -26,73 +24,92 @@ export const listarClientes = async (req, res, next) => {
 };
 
 /**
- * GET /api/v1/clientes/:id
- * Obtener cliente por ID
- */
-export const obtenerCliente = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-
-    const cliente = await prisma.cliente.findUnique({
-      where: { id_cliente: id }
-    });
-
-    if (!cliente) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Cliente no encontrado',
-        data: null
-      });
-    }
-
-    res.json({
-      status: 'success',
-      message: 'Cliente obtenido correctamente',
-      data: cliente
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-/**
  * GET /api/v1/clientes/buscar
  * F4.4.2 - Consulta de clientes por parámetros
+ * Búsqueda unificada por: id, cédula, nombre o estado
  */
 export const buscarClientes = async (req, res, next) => {
   try {
-    const { nombre, cedula, estado } = req.query;
+    const { id, nombre, cedula, estado } = req.query;
 
     // E5: Parámetros faltantes
-    if (!nombre && !cedula && !estado) {
+    if (!id && !nombre && !cedula && !estado) {
       return res.status(400).json({
         status: 'error',
-        message: 'Ingrese al menos un criterio de búsqueda',
+        message: 'Ingrese al menos un criterio de búsqueda (id, nombre, cedula o estado)',
         data: null
       });
     }
 
-    const clientes = await prisma.cliente.findMany({
-      where: {
-        AND: [
-          nombre
-            ? { nombre1: { contains: nombre, mode: 'insensitive' } }
-            : {},
-          cedula
-            ? { ruc_cedula: cedula }
-            : {},
-          estado
-            ? { estado }
-            : {}
-        ]
+    // Si se busca por ID, usar findUnique
+    if (id) {
+      const cliente = await prisma.cliente.findUnique({
+        where: { id_cliente: id },
+        include: { ciudad: true }
+      });
+
+      if (!cliente) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Cliente no encontrado',
+          data: null
+        });
       }
+
+      return res.json({
+        status: 'success',
+        message: 'Cliente encontrado',
+        data: cliente
+      });
+    }
+
+    // Si se busca por cédula exacta, usar findUnique
+    if (cedula && !nombre && !estado) {
+      const cliente = await prisma.cliente.findUnique({
+        where: { ruc_cedula: cedula },
+        include: { ciudad: true }
+      });
+
+      if (!cliente) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Cliente no encontrado',
+          data: null
+        });
+      }
+
+      return res.json({
+        status: 'success',
+        message: 'Cliente encontrado',
+        data: cliente
+      });
+    }
+
+    // Búsqueda con múltiples filtros
+    const whereConditions = {};
+    
+    if (nombre) {
+      whereConditions.nombre1 = { contains: nombre, mode: 'insensitive' };
+    }
+    
+    if (cedula) {
+      whereConditions.ruc_cedula = { contains: cedula };
+    }
+    
+    if (estado) {
+      whereConditions.estado = estado;
+    }
+
+    const clientes = await prisma.cliente.findMany({
+      where: whereConditions,
+      include: { ciudad: true }
     });
 
     // E6: Sin resultados
     if (clientes.length === 0) {
       return res.status(404).json({
         status: 'error',
-        message: 'No se encontraron clientes',
+        message: 'No se encontraron clientes con los criterios especificados',
         data: []
       });
     }
@@ -107,41 +124,9 @@ export const buscarClientes = async (req, res, next) => {
   }
 };
 
-
-/**
- * GET /api/v1/clientes/cedula/:cedula
- * Búsqueda rápida (POS)
- */
-export const buscarPorCedula = async (req, res, next) => {
-  try {
-    const { cedula } = req.params;
-
-    const cliente = await prisma.cliente.findUnique({
-      where: { ruc_cedula: cedula }
-    });
-
-    if (!cliente) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Cliente no encontrado',
-        data: null
-      });
-    }
-
-    return res.json({
-      status: 'success',
-      message: 'Cliente encontrado',
-      data: cliente
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
 /**
  * POST /api/v1/clientes
- * Crear cliente
- * Llama a: sp_cliente_insertar
+ * Ingresar clienteD
  */
 export const crearCliente = async (req, res, next) => {
   try {
@@ -194,7 +179,6 @@ export const crearCliente = async (req, res, next) => {
     next(err);
   }
 };
-
 /**
  * PUT /api/v1/clientes/:id
  * Actualizar cliente

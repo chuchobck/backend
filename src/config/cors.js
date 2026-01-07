@@ -3,12 +3,15 @@
 // Lista de orígenes permitidos
 const allowedOrigins = [
   // Desarrollo local
+  "http://localhost:3000",  // React default dev server
   "http://localhost:3001",  // BARBOX Frontend (npm start)
   "http://localhost:5173",  // Vite dev server
   "http://localhost:5174",  // POS dev
   // Producción - Agregar tus dominios de Vercel aquí
   "https://e-commerce-chuchobck.vercel.app",
   "https://barbox.vercel.app",
+  // Frontend en Vercel proporcionado
+  "https://e-commerce-nu-three-87.vercel.app",
   // Agregar más dominios según necesites
   process.env.FRONTEND_URL,  // Variable de entorno opcional
 ].filter(Boolean);  // Elimina valores undefined/null

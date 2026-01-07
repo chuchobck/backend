@@ -33,78 +33,82 @@ export const listarProductos = async (req, res, next) => {
 };
 
 /**
- * GET /api/v1/productos/:id
- * Obtener producto por ID
+ * GET /api/v1/productos/buscar
+ * F6.4.2 - Consulta de productos por parámetros
+ * Búsqueda unificada por: id, descripción, categoría, estado, rango de precios
  */
-export const obtenerProducto = async (req, res, next) => {
+export const buscarProductos = async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
+    const { id, descripcion, categoriaId, estado, precioMin, precioMax } = req.query;
 
-    if (isNaN(id)) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'ID inválido',
-        data: null
+    // Si se busca por ID, usar findUnique
+    if (id) {
+      const producto = await prisma.producto.findUnique({
+        where: { id_producto: id },
+        include: {
+          categoria: true,
+          unidadMedida: true
+        }
+      });
+
+      if (!producto) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Producto no encontrado',
+          data: null
+        });
+      }
+
+      return res.json({
+        status: 'success',
+        message: 'Producto encontrado',
+        data: producto
       });
     }
 
-    const producto = await prisma.producto.findUnique({
-      where: { id_producto: id },
+    // Búsqueda con múltiples filtros
+    const whereConditions = {};
+
+    if (descripcion) {
+      whereConditions.descripcion = { contains: descripcion, mode: 'insensitive' };
+    }
+
+    if (categoriaId) {
+      whereConditions.categoriaId = Number(categoriaId);
+    }
+
+    if (estado) {
+      whereConditions.estado = estado;
+    }
+
+    if (precioMin || precioMax) {
+      whereConditions.precioVenta = {};
+      if (precioMin) {
+        whereConditions.precioVenta.gte = Number(precioMin);
+      }
+      if (precioMax) {
+        whereConditions.precioVenta.lte = Number(precioMax);
+      }
+    }
+
+    const productos = await prisma.producto.findMany({
+      where: whereConditions,
       include: {
         categoria: true,
         unidadMedida: true
       }
     });
 
-    if (!producto) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Producto no encontrado',
-        data: null
-      });
-    }
-
-    res.json({
-      status: 'success',
-      message: 'Producto obtenido correctamente',
-      data: producto
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-/**
- * GET /api/v1/productos/buscar
- * F6.4.2 Consulta por parámetros
- */
-export const buscarProductos = async (req, res, next) => {
-  try {
-    const { descripcion, categoriaId, estado, precioMin, precioMax } = req.query;
-
-    const productos = await prisma.producto.findMany({
-      where: {
-        descripcion: descripcion
-          ? { contains: descripcion, mode: 'insensitive' }
-          : undefined,
-        categoriaId: categoriaId ? Number(categoriaId) : undefined,
-        estado: estado || undefined,
-        precioVenta: {
-          gte: precioMin ? Number(precioMin) : undefined,
-          lte: precioMax ? Number(precioMax) : undefined
-        }
-      }
-    });
-
+    // E6: Sin resultados
     if (productos.length === 0) {
       return res.status(404).json({
         status: 'error',
-        message: 'No existen productos con los criterios ingresados',
+        message: 'No se encontraron productos con los criterios especificados',
         data: []
       });
     }
 
-    res.json({
+    return res.json({
       status: 'success',
       message: 'Búsqueda completada',
       data: productos
@@ -212,48 +216,6 @@ export const crearProducto = async (req, res, next) => {
   }
 };
 
-/**
- * PUT /api/v1/productos/:id
- * F6.2 Actualización
- */
-export const actualizarProducto = async (req, res, next) => {
-  try {
-    const id = Number(req.params.id);
-
-    if (isNaN(id)) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'ID inválido',
-        data: null
-      });
-    }
-
-    const producto = await prisma.producto.findUnique({
-      where: { id_producto: id }
-    });
-
-    if (!producto) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'El producto especificado no existe',
-        data: null
-      });
-    }
-
-    const actualizado = await prisma.producto.update({
-      where: { id_producto: id },
-      data: req.body
-    });
-
-    res.json({
-      status: 'success',
-      message: 'Producto actualizado correctamente',
-      data: actualizado
-    });
-  } catch (err) {
-    next(err);
-  }
-};
 
 /**
  * DELETE /api/v1/productos/:id
@@ -298,93 +260,8 @@ export const eliminarProducto = async (req, res, next) => {
   }
 };
 
-/**
- * GET /api/v1/productos/categoria/:id
- * Obtener productos por categoría
- * Usado por: E-commerce (navegación por categorías)
- */
-export const productosPorCategoria = async (req, res, next) => {
-  try {
-    const categoriaId = Number(req.params.id);
 
-    if (isNaN(categoriaId)) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'ID de categoría inválido',
-        data: null
-      });
-    }
 
-    const productos = await prisma.producto.findMany({
-      where: {
-        id_categoria_producto: categoriaId,
-        estado: 'ACT'
-      },
-      include: {
-        categoria_producto: true,
-        marca: true
-      }
-    });
-
-    return res.json({
-      status: 'success',
-      message: 'Productos obtenidos correctamente',
-      data: productos
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-/**
- * GET /api/v1/productos/promociones
- * Obtener productos en promoción
- * Usado por: E-commerce (sección de ofertas)
- */
-export const productosEnPromocion = async (req, res, next) => {
-  try {
-    // Obtener productos que están en promociones activas
-    const productosPromo = await prisma.promocion_productos.findMany({
-      where: {
-        promociones: {
-          activo: true,
-          fecha_inicio: { lte: new Date() },
-          fecha_fin: { gte: new Date() }
-        }
-      },
-      include: {
-        producto: {
-          include: {
-            categoria_producto: true,
-            marca: true
-          }
-        },
-        promociones: true
-      }
-    });
-
-    // Formatear respuesta con datos de promoción
-    const productos = productosPromo.map(pp => ({
-      ...pp.producto,
-      promocion: {
-        id: pp.promociones.id,
-        nombre: pp.promociones.nombre,
-        precio_original: pp.promociones.precio_original,
-        precio_promocional: pp.promociones.precio_promocional,
-        porcentaje_descuento: pp.promociones.porcentaje_descuento,
-        fecha_fin: pp.promociones.fecha_fin
-      }
-    }));
-
-    return res.json({
-      status: 'success',
-      message: 'Productos en promoción obtenidos correctamente',
-      data: productos
-    });
-  } catch (err) {
-    next(err);
-  }
-};
 
 /**
  * POST /api/v1/productos/:id/ajustar-stock

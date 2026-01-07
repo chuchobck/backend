@@ -44,3 +44,5 @@ OPTIMIZACIONES_*.md
 # public/logos/
 # public/productos/
 # public/Promociones/
+
+.vercel

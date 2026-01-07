@@ -4,9 +4,7 @@
 import { Router } from 'express';
 import {
   listarFacturas,
-  obtenerFactura,
   buscarFacturas,
-  obtenerFacturasCliente,
   crearFactura,
   editarFacturaAbierta,
   modificarFacturaAprobada,
@@ -21,14 +19,9 @@ const router = Router();
 // GET /api/v1/facturas - Listar facturas (Admin)
 router.get('/', verificarToken, soloAdmin, listarFacturas);
 
-// GET /api/v1/facturas/buscar?cliente=&fecha=&estado= - Buscar (Admin)
+// GET /api/v1/facturas/buscar?id=&cliente=&fechaDesde=&fechaHasta=&estado= - Búsqueda unificada (Admin)
+// Soporta búsqueda por: id, cliente, fechas, estado
 router.get('/buscar', verificarToken, soloAdmin, buscarFacturas);
-
-// GET /api/v1/facturas/cliente/:id_cliente - Facturas de un cliente (Cliente propio)
-router.get('/cliente/:id_cliente', verificarToken, soloPropiosDatos('id_cliente'), obtenerFacturasCliente);
-
-// GET /api/v1/facturas/:id - Obtener factura con detalle (Todos)
-router.get('/:id', verificarToken, obtenerFactura);
 
 // POST /api/v1/facturas - Crear factura
 // E-commerce: estado ABI | POS: estado APR

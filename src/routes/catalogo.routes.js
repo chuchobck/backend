@@ -4,10 +4,7 @@
 import { Router } from 'express';
 import {
   listarProductos,
-  obtenerProducto,
-  buscarProductos,
-  productosPorCategoria,
-  productosEnPromocion
+  buscarProductos
 } from '../controllers/productos.controller.js';
 import prisma from '../config/database.js';
 
