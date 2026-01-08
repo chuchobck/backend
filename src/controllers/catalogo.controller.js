@@ -111,16 +111,16 @@ export const listarProductos = async (req, res, next) => {
     }
 
     // Configurar ordenamiento
-    let orderBy = { fecha_creacion: 'desc' }; // Por defecto: más recientes
+    let orderBy = { id_producto: 'desc' }; // Por defecto: más recientes por ID
     
     if (ordenarPor === 'precio_asc') {
       orderBy = { precio_venta: 'asc' };
     } else if (ordenarPor === 'precio_desc') {
       orderBy = { precio_venta: 'desc' };
-    } else if (ordenarPor === 'nombre') {
+    } else if (ordenarPor === 'nombre' || ordenarPor === 'nombre_asc') {
       orderBy = { descripcion: 'asc' };
     } else if (ordenarPor === 'popular') {
-      // Para "popular" podríamos ordenar por stock o ventas
+      // Para "popular" ordenar por stock (más vendidos = menos stock restante)
       orderBy = { saldo_actual: 'desc' };
     }
 
@@ -148,7 +148,7 @@ export const listarProductos = async (req, res, next) => {
             logo_url: true
           }
         },
-        unidad_medida: {
+        unidad_medida_producto_id_um_ventaTounidad_medida: {
           select: {
             id_unidad_medida: true,
             nombre: true
@@ -184,9 +184,9 @@ export const listarProductos = async (req, res, next) => {
         nombre: p.marca.nombre,
         logo_url: p.marca.logo_url
       } : null,
-      unidad_medida: p.unidad_medida ? {
-        id_unidad_medida: p.unidad_medida.id_unidad_medida,
-        nombre: p.unidad_medida.nombre
+      unidad_medida: p.unidad_medida_producto_id_um_ventaTounidad_medida ? {
+        id_unidad_medida: p.unidad_medida_producto_id_um_ventaTounidad_medida.id_unidad_medida,
+        nombre: p.unidad_medida_producto_id_um_ventaTounidad_medida.nombre
       } : null
     }));
 
@@ -218,7 +218,7 @@ export const obtenerProducto = async (req, res, next) => {
             logo_url: true
           }
         },
-        unidad_medida: {
+        unidad_medida_producto_id_um_ventaTounidad_medida: {
           select: {
             id_unidad_medida: true,
             nombre: true
@@ -261,9 +261,9 @@ export const obtenerProducto = async (req, res, next) => {
         nombre: producto.marca.nombre,
         logo_url: producto.marca.logo_url
       } : null,
-      unidad_medida: producto.unidad_medida ? {
-        id_unidad_medida: producto.unidad_medida.id_unidad_medida,
-        nombre: producto.unidad_medida.nombre
+      unidad_medida: producto.unidad_medida_producto_id_um_ventaTounidad_medida ? {
+        id_unidad_medida: producto.unidad_medida_producto_id_um_ventaTounidad_medida.id_unidad_medida,
+        nombre: producto.unidad_medida_producto_id_um_ventaTounidad_medida.nombre
       } : null
     };
 
