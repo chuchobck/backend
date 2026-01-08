@@ -151,7 +151,7 @@ export const listarProductos = async (req, res, next) => {
         unidad_medida_producto_id_um_ventaTounidad_medida: {
           select: {
             id_unidad_medida: true,
-            nombre: true
+            descripcion: true
           }
         }
       }
@@ -186,7 +186,7 @@ export const listarProductos = async (req, res, next) => {
       } : null,
       unidad_medida: p.unidad_medida_producto_id_um_ventaTounidad_medida ? {
         id_unidad_medida: p.unidad_medida_producto_id_um_ventaTounidad_medida.id_unidad_medida,
-        nombre: p.unidad_medida_producto_id_um_ventaTounidad_medida.nombre
+        nombre: p.unidad_medida_producto_id_um_ventaTounidad_medida.descripcion
       } : null
     }));
 
@@ -221,7 +221,7 @@ export const obtenerProducto = async (req, res, next) => {
         unidad_medida_producto_id_um_ventaTounidad_medida: {
           select: {
             id_unidad_medida: true,
-            nombre: true
+            descripcion: true
           }
         }
       }
@@ -263,7 +263,7 @@ export const obtenerProducto = async (req, res, next) => {
       } : null,
       unidad_medida: producto.unidad_medida_producto_id_um_ventaTounidad_medida ? {
         id_unidad_medida: producto.unidad_medida_producto_id_um_ventaTounidad_medida.id_unidad_medida,
-        nombre: producto.unidad_medida_producto_id_um_ventaTounidad_medida.nombre
+        nombre: producto.unidad_medida_producto_id_um_ventaTounidad_medida.descripcion
       } : null
     };
 
