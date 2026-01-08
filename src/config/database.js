@@ -6,12 +6,14 @@ import { PrismaClient } from "@prisma/client";
 let prisma;
 
 if (process.env.NODE_ENV === 'production') {
+  // En producción preferimos DIRECT_URL (conexión directa) para evitar
+  // problemas con prepared statements cuando se usa un pooler (pgbouncer)
+  const dbUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
   prisma = new PrismaClient({
     log: ['error'],
-    // Configuración de pool de conexiones para producción
     datasources: {
       db: {
-        url: process.env.DATABASE_URL,
+        url: dbUrl,
       },
     },
   });
