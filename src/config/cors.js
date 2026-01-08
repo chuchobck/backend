@@ -1,50 +1,45 @@
-// src/config/cors.js - Configuración de CORS
+﻿// src/config/cors.js - Configuración de CORS
 
-// Lista de orígenes permitidos
 const allowedOrigins = [
-  // Desarrollo local
-  "http://localhost:3000",  // React default dev server
-  "http://localhost:3001",  // BARBOX Frontend (npm start)
-  "http://localhost:5173",  // Vite dev server
-  "http://localhost:5174",  // POS dev
-  // Producción - Agregar tus dominios de Vercel aquí
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:5173",
+  "http://localhost:5174",
   "https://e-commerce-chuchobck.vercel.app",
   "https://barbox.vercel.app",
-  // Frontend en Vercel proporcionado
   "https://e-commerce-nu-three-87.vercel.app",
-  // Nuevos dominios de Vercel (previews y producción)
   "https://e-commerce-mbcyrqxt0-chuchos-projects-4630041d.vercel.app",
-  // Agregar más dominios según necesites
-  process.env.FRONTEND_URL,  // Variable de entorno opcional
-].filter(Boolean);  // Elimina valores undefined/null
+  "https://e-commerce-woad-omega.vercel.app",
+  "https://e-commerce-782t79gv3-chuchos-projects-4630041d.vercel.app",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
 
-// Función para validar origen (permite IPs de red local)
 const validateOrigin = (origin, callback) => {
-  // Permitir requests sin origin (Postman, mobile apps, server-side)
+  // Permitir requests sin origin
   if (!origin) return callback(null, true);
-
+  
   // Permitir localhost
-  if (
-    origin.startsWith("http://localhost") ||
-    origin.startsWith("http://127.0.0.1")
-  ) {
+  if (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1")) {
     return callback(null, true);
   }
-
-  // ✅ Permitir cualquier frontend en Vercel
+  
+  // Permitir cualquier dominio de Vercel
   if (origin.endsWith(".vercel.app")) {
     return callback(null, true);
   }
-
+  
   // Permitir red local
-  const localNetworkPattern =
-    /^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+)(:\d+)?$/;
-
+  const localNetworkPattern = /^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+)(:\d+)?$/;
   if (localNetworkPattern.test(origin)) {
     return callback(null, true);
   }
-
-  // Bloquear todo lo demás
+  
+  // Si está en la lista permitida
+  if (allowedOrigins.includes(origin)) {
+    return callback(null, true);
+  }
+  
+  console.log('❌ Origen bloqueado:', origin);
   callback(new Error(`Origen no permitido por CORS: ${origin}`), false);
 };
 
@@ -55,14 +50,13 @@ export const corsConfig = {
     'Content-Type',
     'Authorization',
     'X-Correlation-ID',
-    'X-Sistema'  // ecommerce, admin, pos
+    'X-Sistema'
   ],
   exposedHeaders: ['X-Total-Count', 'X-Correlation-ID'],
   credentials: true,
-  maxAge: 86400, // 24 horas
+  maxAge: 86400,
   preflightContinue: false,
   optionsSuccessStatus: 204
 };
 
 export const CLIENT_ORIGINS = allowedOrigins;
-
