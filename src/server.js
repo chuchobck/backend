@@ -1,6 +1,6 @@
 // src/server.js - Servidor principal con seguridad JWT
 
-import app from "./app.js";
+import app from '../src/app.js';
 
 // Cargar variables de entorno
 // La app y middlewares están definidos en src/app.js
