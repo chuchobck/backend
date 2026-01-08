@@ -14,7 +14,6 @@ import productosRoutes from './productos.routes.js';
 // ========== RUTAS E-COMMERCE ==========
 import catalogoRoutes from './catalogo.routes.js';
 import promocionesRoutes from './promociones.routes.js';
-import paypalRoutes from './paypal.routes.js';
 import carritoRoutes from './carrito.routes.js';
 import pedidoRoutes from './pedido.routes.js'; 
 import pagoRoutes from './pago.routes.js';
@@ -62,7 +61,6 @@ router.use('/productos', productosRoutes);
 // ===================================
 router.use('/catalogo', catalogoRoutes);
 router.use('/promociones', promocionesRoutes);
-router.use('/paypal', paypalRoutes);
 
 // ===================================
 // AUXILIARES 
