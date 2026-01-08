@@ -1,4 +1,4 @@
-// api/index.js - Entry point para Vercel
+import serverless from 'serverless-http';
 import app from '../src/app.js';
 
-export default app;
+export default serverless(app);
