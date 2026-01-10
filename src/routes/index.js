@@ -29,6 +29,7 @@ import marcaRoutes from './marca.routes.js';
 import canalVentaRoutes from './canal-venta.routes.js';
 import metodoPagoRoutes from './metodo-pago.routes.js';
 import categoriaPromocionRoutes from './categoria-promocion.routes.js';
+import sucursalRoutes from './sucursal.routes.js';
 
 const router = Router();
 
@@ -78,6 +79,7 @@ router.use('/marcas', marcaRoutes);
 router.use('/canales-venta', canalVentaRoutes);
 router.use('/metodos-pago', metodoPagoRoutes);
 router.use('/categorias-promocion', categoriaPromocionRoutes);
+router.use('/sucursales', sucursalRoutes);
 router.use('/carrito', carritoRoutes);
 router.use('/pedidos', pedidoRoutes);
 router.use('/pagos', pagoRoutes);
