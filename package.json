@@ -9,7 +9,8 @@
   },
   "scripts": {
     "build": "prisma generate",
-    "start": "node src/app.js",
+    "start": "node start.js",
+    "dev": "node start.js",
     "test": "node --test",
     "test:smoke": "node tests/run-tests.js"
   },
