@@ -1,449 +1,394 @@
-  generator client {
-    provider        = "prisma-client-js"
-    previewFeatures = ["relationJoins"]
-  }
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
+}
 
-  datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
-  }
+}
 
+model ajuste_inventario {
+  id_ajuste      Int              @id @default(autoincrement())
+  descripcion    String
+  fecha_hora     DateTime?        @default(now()) @db.Timestamp(6)
+  tipo           String           @db.Char(1)
+  num_productos  Int
+  estado         String?          @default("ACT") @db.Char(3)
+  detalle_ajuste detalle_ajuste[]
+}
 
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model ajuste_inventario {
-    id_ajuste      Int              @id @default(autoincrement())
-    descripcion    String
-    fecha_hora     DateTime?        @default(now()) @db.Timestamp(6)
-    tipo           String?          @db.Char(1)
-    num_productos  Int
-    estado         String?          @default("ACT") @db.Char(3)
-    detalle_ajuste detalle_ajuste[]
-  }
+model auditoria {
+  id_auditoria       Int       @id @default(autoincrement())
+  id_usuario         Int?
+  fecha              DateTime? @default(now()) @db.Date
+  hora               DateTime? @default(now()) @db.Time(6)
+  accion             String
+  tabla              String
+  clave_registro     String?
+  valores_anteriores String?
+  descripcion        String?
+  ip_maquina         String?
+}
 
-  model auditoria {
-    id_auditoria       Int       @id @default(autoincrement())
-    usuario_id         String    @db.VarChar(50)
-    fecha              DateTime? @default(dbgenerated("CURRENT_DATE")) @db.Date
-    hora               DateTime? @default(dbgenerated("CURRENT_TIME")) @db.Time(6)
-    accion             String
-    tabla              String
-    clave_registro     String?
-    valores_anteriores String?
-    descripcion        String?
-    ip_maquina         String?
-    estado             String?   @default("ACT")
-  }
+model canal_venta {
+  id_canal    String    @id @db.Char(3)
+  descripcion String
+  estado      String?   @default("ACT") @db.Char(3)
+  factura     factura[]
+}
 
-  model categoria_producto {
-    id_categoria_producto Int        @id @default(autoincrement())
-    nombre                String
-    descripcion           String?
-    activo                Boolean?   @default(true)
-    fecha_creacion        DateTime?  @default(now()) @db.Timestamp(6)
-    marca                 marca[]
-    producto              producto[]
-  }
+model carrito {
+  id_carrito          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_cliente          Int?
+  session_id          String?           @db.VarChar(100)
+  estado              String?           @default("ACT") @db.Char(3)
+  subtotal            Decimal?          @default(0) @db.Decimal(14, 3)
+  total               Decimal?          @default(0) @db.Decimal(14, 3)
+  fecha_creacion      DateTime?         @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime?         @db.Timestamp(6)
+  cliente             cliente?          @relation(fields: [id_cliente], references: [id_cliente], onDelete: NoAction, onUpdate: NoAction)
+  carrito_detalle     carrito_detalle[]
+  factura             factura?
+}
 
-  model categoria_promocion {
-    id             Int           @id @default(autoincrement())
-    nombre         String
-    descripcion    String?
-    orden          Int?
-    activo         Boolean?      @default(true)
-    fecha_creacion DateTime?     @default(now()) @db.Timestamp(6)
-    promociones    promociones[]
-  }
+model carrito_detalle {
+  id_carrito      String    @db.Uuid
+  id_producto     String    @db.VarChar(7)
+  cantidad        Int
+  precio_unitario Decimal   @db.Decimal(14, 3)
+  subtotal        Decimal   @db.Decimal(14, 3)
+  fecha_agregado  DateTime? @default(now()) @db.Timestamp(6)
+  carrito         carrito   @relation(fields: [id_carrito], references: [id_carrito], onDelete: Cascade, onUpdate: NoAction)
+  producto        producto  @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
 
-  model ciudad {
-    id_ciudad   String      @id @db.Char(3)
-    descripcion String
-    cliente     cliente[]
-    proveedor   proveedor[]
-  }
+  @@id([id_carrito, id_producto])
+}
 
-  model cliente {
-    id_cliente String    @id @db.VarChar(7)
-    nombre1    String
-    nombre2    String?
-    apellido1  String
-    apellido2  String?
-    ruc_cedula String    @unique @db.VarChar(13)
-    telefono   String?
-    email      String?
-    id_ciudad  String    @db.Char(3)
-    celular    String?
-    direccion  String?
-    estado     String?   @default("ACT") @db.Char(3)
-    ciudad     ciudad    @relation(fields: [id_ciudad], references: [id_ciudad], onDelete: NoAction, onUpdate: NoAction)
-    factura    factura[]
-    pedido     pedido[]
-    usuario    usuario[]
-  }
+model categoria_producto {
+  id_categoria Int        @id @default(autoincrement())
+  nombre       String
+  descripcion  String?
+  activo       Boolean?   @default(true)
+  marca        marca[]
+  producto     producto[]
+}
 
-  model compra {
-    id_compra      String           @id @db.VarChar(7)
-    id_proveedor   String           @db.VarChar(7)
-    id_iva         Int
-    fecha          DateTime?        @default(dbgenerated("CURRENT_DATE")) @db.Date
-    subtotal       Decimal          @db.Decimal(14, 3)
-    total          Decimal          @db.Decimal(14, 3)
-    estado         String?          @default("PEN") @db.Char(3)
-    iva            iva              @relation(fields: [id_iva], references: [id_iva], onDelete: NoAction, onUpdate: NoAction)
-    proveedor      proveedor        @relation(fields: [id_proveedor], references: [id_proveedor], onDelete: NoAction, onUpdate: NoAction)
-    detalle_compra detalle_compra[]
-    recepcion      recepcion[]
+model categoria_promocion {
+  id          Int         @id @default(autoincrement())
+  nombre      String
+  descripcion String?
+  orden       Int?
+  activo      Boolean?    @default(true)
+  promocion   promocion[]
+}
 
-    @@index([fecha], map: "idx_compra_fecha")
-  }
+model ciudad {
+  id_ciudad   String      @id @db.Char(3)
+  descripcion String
+  cliente     cliente[]
+  proveedor   proveedor[]
+  sucursal    sucursal[]
+}
 
-  model detalle_ajuste {
-    id_ajuste         Int
-    id_producto       String            @db.VarChar(7)
-    cantidad          Int
-    estado            String?           @default("ACT") @db.Char(3)
-    ajuste_inventario ajuste_inventario @relation(fields: [id_ajuste], references: [id_ajuste], onDelete: Cascade, onUpdate: NoAction)
-    producto          producto          @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
+model cliente {
+  id_cliente        Int                 @id @default(autoincrement())
+  id_usuario        Int?                @unique
+  ruc_cedula        String              @unique @db.VarChar(13)
+  nombre            String
+  email             String?
+  telefono          String?
+  direccion         String?
+  id_ciudad         String?             @db.Char(3)
+  origen            String?             @default("POS") @db.Char(3)
+  estado            String?             @default("ACT") @db.Char(3)
+  fecha_creacion    DateTime?           @default(now()) @db.Timestamp(6)
+  carrito           carrito[]
+  ciudad            ciudad?             @relation(fields: [id_ciudad], references: [id_ciudad], onDelete: NoAction, onUpdate: NoAction)
+  usuario           usuario?            @relation(fields: [id_usuario], references: [id_usuario], onUpdate: NoAction)
+  factura           factura[]
+  producto_favorito producto_favorito[]
+}
 
-    @@id([id_ajuste, id_producto])
-  }
+model compra {
+  id_compra      String           @id @db.VarChar(7)
+  id_proveedor   String           @db.VarChar(7)
+  id_iva         Int
+  fecha          DateTime?        @default(now()) @db.Date
+  subtotal       Decimal          @db.Decimal(14, 3)
+  total          Decimal          @db.Decimal(14, 3)
+  estado         String?          @default("PEN") @db.Char(3)
+  iva            iva              @relation(fields: [id_iva], references: [id_iva], onDelete: NoAction, onUpdate: NoAction)
+  proveedor      proveedor        @relation(fields: [id_proveedor], references: [id_proveedor], onDelete: NoAction, onUpdate: NoAction)
+  detalle_compra detalle_compra[]
+  recepcion      recepcion[]
+}
 
-  model detalle_compra {
-    id_compra         String   @db.VarChar(7)
-    id_producto       String   @db.VarChar(7)
-    cantidad          Int
-    costo_unitario    Decimal  @db.Decimal(14, 3)
-    subtotal          Decimal  @db.Decimal(14, 3)
-    estado            String?  @default("ACT") @db.Char(3)
-    cantidad_recibida Int      @default(0)
-    compra            compra   @relation(fields: [id_compra], references: [id_compra], onDelete: Cascade, onUpdate: NoAction)
-    producto          producto @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
+model detalle_ajuste {
+  id_ajuste         Int
+  id_producto       String            @db.VarChar(7)
+  cantidad          Int
+  ajuste_inventario ajuste_inventario @relation(fields: [id_ajuste], references: [id_ajuste], onDelete: Cascade, onUpdate: NoAction)
+  producto          producto          @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
 
-    @@id([id_compra, id_producto])
-  }
+  @@id([id_ajuste, id_producto])
+}
 
-  model detalle_factura {
-    id_factura      String   @db.VarChar(7)
-    id_producto     String   @db.VarChar(7)
-    cantidad        Int
-    precio_unitario Decimal  @db.Decimal(14, 3)
-    subtotal        Decimal  @db.Decimal(14, 3)
-    estado          String?  @default("ACT") @db.Char(3)
-    factura         factura  @relation(fields: [id_factura], references: [id_factura], onDelete: Cascade, onUpdate: NoAction)
-    producto        producto @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
+model detalle_compra {
+  id_compra         String   @db.VarChar(7)
+  id_producto       String   @db.VarChar(7)
+  cantidad          Int
+  costo_unitario    Decimal  @db.Decimal(14, 3)
+  subtotal          Decimal  @db.Decimal(14, 3)
+  cantidad_recibida Int?     @default(0)
+  compra            compra   @relation(fields: [id_compra], references: [id_compra], onDelete: Cascade, onUpdate: NoAction)
+  producto          producto @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
 
-    @@id([id_factura, id_producto])
-  }
+  @@id([id_compra, id_producto])
+}
 
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model detalle_recepcion {
-    id_recepcion        Int
-    id_producto         String    @db.VarChar(7)
-    cantidad_solicitada Int
-    cantidad_recibida   Int
-    estado              String?   @default("ACT") @db.Char(3)
-    producto            producto  @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
-    recepcion           recepcion @relation(fields: [id_recepcion], references: [id_recepcion], onDelete: Cascade, onUpdate: NoAction)
+model detalle_recepcion {
+  id_recepcion        Int
+  id_producto         String    @db.VarChar(7)
+  cantidad_solicitada Int
+  cantidad_recibida   Int
+  producto            producto  @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
+  recepcion           recepcion @relation(fields: [id_recepcion], references: [id_recepcion], onDelete: Cascade, onUpdate: NoAction)
 
-    @@id([id_recepcion, id_producto])
-  }
+  @@id([id_recepcion, id_producto])
+}
 
-  model factura {
-    id_factura      String            @id @default(dbgenerated("('FAC'::text || lpad((nextval('factura_id_factura_seq'::regclass))::text, 4, '0'::text))")) @db.VarChar(7)
-    id_cliente      String            @db.VarChar(7)
-    id_iva          Int
-    fecha           DateTime?         @default(dbgenerated("CURRENT_DATE")) @db.Date
-    subtotal        Decimal           @db.Decimal(14, 3)
-    total           Decimal           @db.Decimal(14, 3)
-    estado          String?           @default("PEN") @db.Char(3)
-    id_canal        String            @default("POS") @db.Char(3)
-    id_pedido       String?           @unique @db.VarChar(7)
-    detalle_factura detalle_factura[]
-    canal_venta     canal_venta       @relation(fields: [id_canal], references: [id_canal], onDelete: NoAction, onUpdate: NoAction)
-    cliente         cliente           @relation(fields: [id_cliente], references: [id_cliente], onDelete: NoAction, onUpdate: NoAction)
-    iva             iva               @relation(fields: [id_iva], references: [id_iva], onDelete: NoAction, onUpdate: NoAction)
-    pedido          pedido?           @relation(fields: [id_pedido], references: [id_pedido], onDelete: NoAction, onUpdate: NoAction, map: "fk_factura_pedido")
+model empleado {
+  id_empleado    Int         @id @default(autoincrement())
+  id_usuario     Int         @unique
+  cedula         String      @unique @db.VarChar(13)
+  nombre         String
+  apellido       String
+  telefono       String?
+  id_rol         Int
+  id_sucursal    Int?
+  estado         String?     @default("ACT") @db.Char(3)
+  fecha_creacion DateTime?   @default(now()) @db.Timestamp(6)
+  rol            rol         @relation(fields: [id_rol], references: [id_rol], onDelete: NoAction, onUpdate: NoAction)
+  sucursal       sucursal?   @relation(fields: [id_sucursal], references: [id_sucursal], onDelete: NoAction, onUpdate: NoAction)
+  usuario        usuario     @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade, onUpdate: NoAction)
+  factura        factura[]
+  recepcion      recepcion[]
+}
 
-    @@index([fecha], map: "idx_factura_fecha")
-  }
+model factura {
+  id_factura      String            @id @db.VarChar(15)
+  id_canal        String            @db.Char(3)
+  id_cliente      Int
+  id_carrito      String?           @unique @db.Uuid
+  id_empleado     Int?
+  id_sucursal     Int
+  id_metodo_pago  Int
+  referencia_pago String?
+  id_iva          Int
+  subtotal        Decimal           @db.Decimal(14, 3)
+  iva_valor       Decimal           @db.Decimal(14, 3)
+  total           Decimal           @db.Decimal(14, 3)
+  estado          String?           @default("EMI") @db.Char(3)
+  estado_retiro   String?           @db.Char(3)
+  fecha_emision   DateTime?         @default(now()) @db.Timestamp(6)
+  fecha_retiro    DateTime?         @db.Timestamp(6)
+  canal_venta     canal_venta       @relation(fields: [id_canal], references: [id_canal], onDelete: NoAction, onUpdate: NoAction)
+  carrito         carrito?          @relation(fields: [id_carrito], references: [id_carrito], onDelete: NoAction, onUpdate: NoAction)
+  cliente         cliente           @relation(fields: [id_cliente], references: [id_cliente], onDelete: NoAction, onUpdate: NoAction)
+  empleado        empleado?         @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction)
+  iva             iva               @relation(fields: [id_iva], references: [id_iva], onDelete: NoAction, onUpdate: NoAction)
+  metodo_pago     metodo_pago       @relation(fields: [id_metodo_pago], references: [id_metodo_pago], onDelete: NoAction, onUpdate: NoAction)
+  sucursal        sucursal          @relation(fields: [id_sucursal], references: [id_sucursal], onDelete: NoAction, onUpdate: NoAction)
+  factura_detalle factura_detalle[]
+}
 
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model iva {
-    id_iva       Int       @id @default(autoincrement())
-    porcentaje   Decimal   @db.Decimal(5, 2)
-    fecha_inicio DateTime  @db.Date
-    fecha_fin    DateTime? @db.Date
-    estado       String    @db.Char(1)
-    compra       compra[]
-    factura      factura[]
-  }
+model factura_detalle {
+  id_factura      String   @db.VarChar(15)
+  id_producto     String   @db.VarChar(7)
+  cantidad        Int
+  precio_unitario Decimal  @db.Decimal(14, 3)
+  subtotal        Decimal  @db.Decimal(14, 3)
+  factura         factura  @relation(fields: [id_factura], references: [id_factura], onDelete: Cascade, onUpdate: NoAction)
+  producto        producto @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
 
-  model producto {
-    id_producto                                        String                @id @db.VarChar(7)
-    descripcion                                        String
-    id_um_compra                                       String                @db.Char(3)
-    id_um_venta                                        String                @db.Char(3)
-    costo_promedio                                     Decimal?              @default(0) @db.Decimal(14, 3)
-    precio_venta                                       Decimal               @db.Decimal(14, 3)
-    saldo_inicial                                      Int?                  @default(0)
-    ingresos                                           Int?                  @default(0)
-    egresos                                            Int?                  @default(0)
-    ajustes                                            Int?                  @default(0)
-    saldo_actual                                       Int?                  @default(dbgenerated("(((saldo_inicial + ingresos) - egresos) + ajustes)"))
-    estado                                             String?               @default("ACT") @db.Char(3)
-    id_categoria_producto                              Int?
-    id_marca                                           Int?
-    precio_regular                                     Decimal?              @db.Decimal(14, 5)
-    volumen                                            Decimal?              @db.Decimal(10, 2)
-    alcohol_vol                                        Decimal?              @db.Decimal(4, 2)
-    origen                                             String?               @db.VarChar(50)
-    notas_cata                                         String?
-    imagen_url                                         String?               @db.VarChar(255)
-    carrito_detalle                                    carrito_detalle[]
-    detalle_ajuste                                     detalle_ajuste[]
-    detalle_compra                                     detalle_compra[]
-    detalle_factura                                    detalle_factura[]
-    detalle_recepcion                                  detalle_recepcion[]
-    pedido_detalle                                     pedido_detalle[]
-    categoria_producto                                 categoria_producto?   @relation(fields: [id_categoria_producto], references: [id_categoria_producto], onDelete: NoAction, onUpdate: NoAction, map: "fk_producto_categoria_producto")
-    marca                                              marca?                @relation(fields: [id_marca], references: [id_marca], onDelete: NoAction, onUpdate: NoAction, map: "fk_producto_marca")
-    unidad_medida_producto_id_um_compraTounidad_medida unidad_medida         @relation("producto_id_um_compraTounidad_medida", fields: [id_um_compra], references: [id_unidad_medida], onDelete: NoAction, onUpdate: NoAction)
-    unidad_medida_producto_id_um_ventaTounidad_medida  unidad_medida         @relation("producto_id_um_ventaTounidad_medida", fields: [id_um_venta], references: [id_unidad_medida], onDelete: NoAction, onUpdate: NoAction)
-    producto_favorito                                  producto_favorito[]
-    promocion_productos                                promocion_productos[]
+  @@id([id_factura, id_producto])
+}
 
-    @@index([descripcion], map: "idx_producto_descripcion")
-  }
+model iva {
+  id_iva       Int       @id @default(autoincrement())
+  porcentaje   Decimal   @db.Decimal(5, 2)
+  fecha_inicio DateTime  @db.Date
+  fecha_fin    DateTime? @db.Date
+  estado       String    @db.Char(1)
+  compra       compra[]
+  factura      factura[]
+}
 
-  model promocion_productos {
-    id                    Int         @id @default(autoincrement())
-    promocion_id          Int
-    producto_id           String      @db.VarChar(7)
-    cantidad              Int
-    es_producto_principal Boolean?    @default(false)
-    orden                 Int?
-    fecha_creacion        DateTime?   @default(now()) @db.Timestamp(6)
-    producto              producto    @relation(fields: [producto_id], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
-    promociones           promociones @relation(fields: [promocion_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  }
+model marca {
+  id_marca           Int                @id @default(autoincrement())
+  nombre             String             @unique @db.VarChar(50)
+  id_categoria       Int
+  logo_url           String?
+  estado             String?            @default("ACT") @db.Char(3)
+  categoria_producto categoria_producto @relation(fields: [id_categoria], references: [id_categoria], onDelete: NoAction, onUpdate: NoAction)
+  producto           producto[]
+}
 
-  model promociones {
-    id                      Int                   @id @default(autoincrement())
-    categoria_promocion_id  Int
-    nombre                  String
-    descripcion             String?
-    descripcion_corta       String?
-    marca                   String?
-    precio_original         Decimal               @db.Decimal(10, 2)
-    precio_promocional      Decimal               @db.Decimal(10, 2)
-    porcentaje_descuento    Decimal               @db.Decimal(5, 2)
-    cantidad_vendida        Int?                  @default(0)
-    fecha_inicio            DateTime              @db.Timestamp(6)
-    fecha_fin               DateTime              @db.Timestamp(6)
-    activo                  Boolean?              @default(true)
-    destacado               Boolean?              @default(false)
-    cantidad_maxima_cliente Int?
-    stock_disponible        Int
-    mensaje_regalo          String?
-    fecha_creacion          DateTime?             @default(now()) @db.Timestamp(6)
-    fecha_actualizacion     DateTime?             @db.Timestamp(6)
-    promocion_productos     promocion_productos[]
-    categoria_promocion     categoria_promocion   @relation(fields: [categoria_promocion_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  }
+model metodo_pago {
+  id_metodo_pago      Int       @id @default(autoincrement())
+  codigo              String    @unique @db.VarChar(20)
+  nombre              String
+  disponible_pos      Boolean?  @default(true)
+  disponible_web      Boolean?  @default(true)
+  requiere_referencia Boolean?  @default(false)
+  estado              String?   @default("ACT") @db.Char(3)
+  factura             factura[]
+}
 
-  model proveedor {
-    id_proveedor String   @id @db.VarChar(7)
-    nombre1      String
-    nombre2      String?
-    apellido1    String
-    apellido2    String?
-    ruc_cedula   String   @unique @db.VarChar(13)
-    telefono     String?
-    email        String?
-    id_ciudad    String   @db.Char(3)
-    celular      String?
-    direccion    String?
-    estado       String?  @default("ACT") @db.Char(3)
-    compra       compra[]
-    ciudad       ciudad   @relation(fields: [id_ciudad], references: [id_ciudad], onDelete: NoAction, onUpdate: NoAction)
-  }
+model producto {
+  id_producto                                        String               @id @db.VarChar(7)
+  descripcion                                        String
+  id_categoria                                       Int?
+  id_marca                                           Int?
+  id_um_compra                                       String               @db.Char(3)
+  id_um_venta                                        String               @db.Char(3)
+  costo_promedio                                     Decimal?             @default(0) @db.Decimal(14, 3)
+  precio_venta                                       Decimal              @db.Decimal(14, 3)
+  saldo_inicial                                      Int?                 @default(0)
+  ingresos                                           Int?                 @default(0)
+  egresos                                            Int?                 @default(0)
+  ajustes                                            Int?                 @default(0)
+  saldo_actual                                       Int?
+  volumen                                            Decimal?             @db.Decimal(10, 2)
+  alcohol_vol                                        Decimal?             @db.Decimal(4, 2)
+  origen                                             String?
+  notas_cata                                         String?
+  imagen_url                                         String?
+  estado                                             String?              @default("ACT") @db.Char(3)
+  carrito_detalle                                    carrito_detalle[]
+  detalle_ajuste                                     detalle_ajuste[]
+  detalle_compra                                     detalle_compra[]
+  detalle_recepcion                                  detalle_recepcion[]
+  factura_detalle                                    factura_detalle[]
+  categoria_producto                                 categoria_producto?  @relation(fields: [id_categoria], references: [id_categoria], onDelete: NoAction, onUpdate: NoAction)
+  marca                                              marca?               @relation(fields: [id_marca], references: [id_marca], onDelete: NoAction, onUpdate: NoAction)
+  unidad_medida_producto_id_um_compraTounidad_medida unidad_medida        @relation("producto_id_um_compraTounidad_medida", fields: [id_um_compra], references: [id_unidad_medida], onDelete: NoAction, onUpdate: NoAction)
+  unidad_medida_producto_id_um_ventaTounidad_medida  unidad_medida        @relation("producto_id_um_ventaTounidad_medida", fields: [id_um_venta], references: [id_unidad_medida], onDelete: NoAction, onUpdate: NoAction)
+  producto_favorito                                  producto_favorito[]
+  promocion_producto                                 promocion_producto[]
+}
 
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model recepcion {
-    id_recepcion      Int                 @id @default(autoincrement())
-    descripcion       String?
-    fecha_hora        DateTime?           @default(now()) @db.Timestamp(6)
-    num_productos     Int
-    estado            String?             @default("ACT") @db.Char(3)
-    id_compra         String?             @db.VarChar(7)
-    observaciones     String?
-    motivo_anulacion  String?
-    fecha_anulacion   DateTime?           @db.Timestamp(6)
-    detalle_recepcion detalle_recepcion[]
-    compra            compra?             @relation(fields: [id_compra], references: [id_compra], onDelete: NoAction, onUpdate: NoAction, map: "fk_recepcion_compra")
-  }
+model producto_favorito {
+  id_cliente     Int
+  id_producto    String    @db.VarChar(7)
+  fecha_creacion DateTime? @default(now()) @db.Timestamp(6)
+  cliente        cliente   @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade, onUpdate: NoAction)
+  producto       producto  @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
 
-  model unidad_medida {
-    id_unidad_medida                              String     @id @db.Char(3)
-    descripcion                                   String
-    producto_producto_id_um_compraTounidad_medida producto[] @relation("producto_id_um_compraTounidad_medida")
-    producto_producto_id_um_ventaTounidad_medida  producto[] @relation("producto_id_um_ventaTounidad_medida")
-  }
+  @@id([id_cliente, id_producto])
+}
 
-  model empleado {
-    id_empleado Int       @id @default(autoincrement())
-    nombre      String
-    apellido    String
-    cedula      String    @unique @db.VarChar(13)
-    email       String?
-    telefono    String?
-    id_rol      Int
-    estado      String?   @default("ACT") @db.Char(3)
-    rol         rol       @relation(fields: [id_rol], references: [id_rol], onDelete: NoAction, onUpdate: NoAction)
-    usuario     usuario[]
-  }
+model promocion {
+  id                      Int                  @id @default(autoincrement())
+  id_categoria            Int
+  nombre                  String
+  descripcion             String?
+  descripcion_corta       String?
+  precio_original         Decimal?             @db.Decimal(10, 2)
+  precio_promocional      Decimal?             @db.Decimal(10, 2)
+  porcentaje_descuento    Decimal?             @db.Decimal(5, 2)
+  fecha_inicio            DateTime             @db.Timestamp(6)
+  fecha_fin               DateTime             @db.Timestamp(6)
+  stock_disponible        Int
+  cantidad_vendida        Int?                 @default(0)
+  cantidad_maxima_cliente Int?
+  destacado               Boolean?             @default(false)
+  activo                  Boolean?             @default(true)
+  fecha_creacion          DateTime?            @default(now()) @db.Timestamp(6)
+  categoria_promocion     categoria_promocion  @relation(fields: [id_categoria], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  promocion_producto      promocion_producto[]
+}
 
-  model rol {
-    id_rol      Int        @id @default(autoincrement())
-    nombre      String     @unique @db.VarChar(30)
-    descripcion String?
-    estado      String?    @default("ACT") @db.Char(3)
-    empleado    empleado[]
-  }
+model promocion_producto {
+  id           Int       @id @default(autoincrement())
+  id_promocion Int
+  id_producto  String    @db.VarChar(7)
+  cantidad     Int
+  es_principal Boolean?  @default(false)
+  orden        Int?
+  producto     producto  @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
+  promocion    promocion @relation(fields: [id_promocion], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
 
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model usuario {
-    id_usuario        Int                 @id @default(autoincrement())
-    password_hash     String
-    email             String?             @unique
-    tipo_usuario      String              @db.VarChar(20)
-    rol               String              @db.VarChar(20)
-    id_cliente        String?             @db.VarChar(7)
-    estado            String?             @default("ACT") @db.Char(3)
-    fecha_creacion    DateTime?           @default(now()) @db.Timestamp(6)
-    ultimo_acceso     DateTime?           @db.Timestamp(6)
-    creado_por        Int?
-    id_empleado       Int?
-    carrito           carrito[]
-    pedido            pedido[]
-    producto_favorito producto_favorito[]
-    empleado          empleado?           @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_usuario_empleado")
-    creador           usuario?            @relation("usuario_creador", fields: [creado_por], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction)
-    creados           usuario[]           @relation("usuario_creador")
-    cliente           cliente?            @relation(fields: [id_cliente], references: [id_cliente], onDelete: NoAction, onUpdate: NoAction)
+model proveedor {
+  id_proveedor String   @id @db.VarChar(7)
+  ruc_cedula   String   @unique @db.VarChar(13)
+  nombre       String
+  telefono     String?
+  email        String?
+  direccion    String?
+  id_ciudad    String   @db.Char(3)
+  estado       String?  @default("ACT") @db.Char(3)
+  compra       compra[]
+  ciudad       ciudad   @relation(fields: [id_ciudad], references: [id_ciudad], onDelete: NoAction, onUpdate: NoAction)
+}
 
-    @@index([email], map: "idx_usuario_email")
-    @@index([estado], map: "idx_usuario_estado")
-    @@index([rol], map: "idx_usuario_rol")
-  }
+model recepcion {
+  id_recepcion      Int                 @id @default(autoincrement())
+  id_compra         String?             @db.VarChar(7)
+  id_empleado       Int?
+  descripcion       String?
+  fecha_hora        DateTime?           @default(now()) @db.Timestamp(6)
+  num_productos     Int
+  estado            String?             @default("ACT") @db.Char(3)
+  observaciones     String?
+  motivo_anulacion  String?
+  fecha_anulacion   DateTime?           @db.Timestamp(6)
+  detalle_recepcion detalle_recepcion[]
+  compra            compra?             @relation(fields: [id_compra], references: [id_compra], onDelete: NoAction, onUpdate: NoAction)
+  empleado          empleado?           @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction)
+}
 
-  model producto_favorito {
-    id_favorito    Int       @id @default(autoincrement())
-    id_usuario     Int
-    id_producto    String    @db.VarChar(7)
-    fecha_creacion DateTime? @default(now()) @db.Timestamp(6)
-    estado         String?   @default("ACT") @db.Char(3)
-    producto       producto  @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction, map: "fk_producto_favorito")
-    usuario        usuario   @relation(fields: [id_usuario], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction, map: "fk_usuario_favorito")
+model rol {
+  id_rol      Int        @id @default(autoincrement())
+  codigo      String     @unique @db.VarChar(20)
+  nombre      String     @db.VarChar(50)
+  descripcion String?
+  estado      String?    @default("ACT") @db.Char(3)
+  empleado    empleado[]
+}
 
-    @@index([id_producto], map: "idx_producto_favorito_producto")
-    @@index([id_usuario], map: "idx_producto_favorito_usuario")
-  }
+model sucursal {
+  id_sucursal     Int        @id @default(autoincrement())
+  codigo          String     @unique @db.VarChar(10)
+  nombre          String
+  direccion       String
+  id_ciudad       String     @db.Char(3)
+  telefono        String?
+  horario         String?
+  activo          Boolean?   @default(true)
+  es_punto_retiro Boolean?   @default(true)
+  empleado        empleado[]
+  factura         factura[]
+  ciudad          ciudad     @relation(fields: [id_ciudad], references: [id_ciudad], onDelete: NoAction, onUpdate: NoAction)
+}
 
-  model marca {
-    id_marca           Int                @id @default(autoincrement())
-    nombre             String             @unique @db.VarChar(50)
-    id_categoria       Int
-    estado             String             @db.Char(3)
-    logo_url           String?            @db.VarChar(255)
-    categoria_producto categoria_producto @relation(fields: [id_categoria], references: [id_categoria_producto], onDelete: NoAction, onUpdate: NoAction)
-    producto           producto[]
-  }
+model unidad_medida {
+  id_unidad_medida                              String     @id @db.Char(3)
+  descripcion                                   String
+  producto_producto_id_um_compraTounidad_medida producto[] @relation("producto_id_um_compraTounidad_medida")
+  producto_producto_id_um_ventaTounidad_medida  producto[] @relation("producto_id_um_ventaTounidad_medida")
+}
 
-  model canal_venta {
-    id_canal       String    @id @db.Char(3)
-    descripcion    String
-    estado         String?   @default("ACT") @db.Char(3)
-    fecha_creacion DateTime? @default(now()) @db.Timestamp(6)
-    carrito        carrito[]
-    factura        factura[]
-    pedido         pedido[]
-  }
-
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-  model carrito {
-    id_carrito          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    id_usuario          Int
-    id_canal            String            @db.Char(3)
-    estado              String?           @default("ACT") @db.Char(3)
-    subtotal            Decimal?          @default(0) @db.Decimal(14, 3)
-    descuento           Decimal?          @default(0) @db.Decimal(14, 3)
-    total               Decimal?          @default(0) @db.Decimal(14, 3)
-    fecha_creacion      DateTime?         @default(now()) @db.Timestamp(6)
-    fecha_actualizacion DateTime?         @db.Timestamp(6)
-    canal_venta         canal_venta       @relation(fields: [id_canal], references: [id_canal], onDelete: NoAction, onUpdate: NoAction, map: "carrito_canal_fkey")
-    usuario             usuario           @relation(fields: [id_usuario], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction, map: "carrito_usuario_fkey")
-    carrito_detalle     carrito_detalle[]
-    pedido              pedido?
-  }
-
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-  model carrito_detalle {
-    id_carrito         String    @db.Uuid
-    id_producto        String    @db.VarChar(7)
-    cantidad           Int
-    precio_referencial Decimal   @db.Decimal(14, 3)
-    subtotal           Decimal   @db.Decimal(14, 3)
-    fecha_agregado     DateTime? @default(now()) @db.Timestamp(6)
-    carrito            carrito   @relation(fields: [id_carrito], references: [id_carrito], onDelete: Cascade, onUpdate: NoAction, map: "carrito_detalle_carrito_fkey")
-    producto           producto  @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction, map: "carrito_detalle_producto_fkey")
-
-    @@id([id_carrito, id_producto])
-    @@index([id_carrito], map: "idx_carrito_detalle_id_carrito")
-  }
-
-  model pago {
-    id_pago    Int       @id @default(autoincrement())
-    id_pedido  String    @db.VarChar(7)
-    metodo     String?   @db.VarChar(30)
-    monto      Decimal   @db.Decimal(14, 3)
-    estado     String?   @default("PEN") @db.Char(3)
-    referencia String?   @db.VarChar(100)
-    fecha_pago DateTime? @default(now()) @db.Timestamp(6)
-    pedido     pedido    @relation(fields: [id_pedido], references: [id_pedido], onDelete: Cascade, onUpdate: NoAction, map: "fk_pago_pedido")
-  }
-
-  model pedido {
-    id_pedido           String           @id @db.VarChar(7)
-    id_cliente          String?          @db.VarChar(7)
-    id_usuario          Int?
-    id_canal            String           @db.Char(3)
-    subtotal            Decimal          @db.Decimal(14, 3)
-    descuento           Decimal?         @default(0) @db.Decimal(14, 3)
-    total               Decimal          @db.Decimal(14, 3)
-    estado              String?          @default("PEN") @db.Char(3)
-    fecha_creacion      DateTime?        @default(now()) @db.Timestamp(6)
-    fecha_actualizacion DateTime?        @db.Timestamp(6)
-    id_carrito          String?          @unique @db.Uuid
-    factura             factura?
-    pago                pago[]
-    canal_venta         canal_venta      @relation(fields: [id_canal], references: [id_canal], onDelete: NoAction, onUpdate: NoAction, map: "fk_pedido_canal")
-    carrito             carrito?         @relation(fields: [id_carrito], references: [id_carrito], onDelete: NoAction, onUpdate: NoAction, map: "fk_pedido_carrito")
-    cliente             cliente?         @relation(fields: [id_cliente], references: [id_cliente], onDelete: NoAction, onUpdate: NoAction, map: "fk_pedido_cliente")
-    usuario             usuario?         @relation(fields: [id_usuario], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction, map: "fk_pedido_usuario")
-    pedido_detalle      pedido_detalle[]
-  }
-
-  model pedido_detalle {
-    id_pedido       String   @db.VarChar(7)
-    id_producto     String   @db.VarChar(7)
-    cantidad        Int
-    precio_unitario Decimal  @db.Decimal(14, 3)
-    subtotal        Decimal  @db.Decimal(14, 3)
-    pedido          pedido   @relation(fields: [id_pedido], references: [id_pedido], onDelete: Cascade, onUpdate: NoAction, map: "fk_pedido_detalle_pedido")
-    producto        producto @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction, map: "fk_pedido_detalle_producto")
-
-    @@id([id_pedido, id_producto])
-  }
+model usuario {
+  id_usuario     Int       @id @default(autoincrement())
+  email          String    @unique
+  password_hash  String
+  estado         String?   @default("ACT") @db.Char(3)
+  fecha_creacion DateTime? @default(now()) @db.Timestamp(6)
+  ultimo_acceso  DateTime? @db.Timestamp(6)
+  cliente        cliente?
+  empleado       empleado?
+}
