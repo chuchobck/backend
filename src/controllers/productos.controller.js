@@ -198,7 +198,7 @@ export const crearProducto = async (req, res, next) => {
         descripcion,
         precioCompra,
         precioVenta,
-        stock: saldoInicial || 0,
+        saldo_inicial: saldoInicial || 0,
         categoriaId,
         unidadMedidaId,
         proveedorId,
@@ -216,6 +216,106 @@ export const crearProducto = async (req, res, next) => {
   }
 };
 
+/**
+ * PUT /api/v1/productos/:id
+ * F6.2 Actualización de producto
+ * Permite actualizar: descripcion, precio_venta, precio_compra, categoría, marca, unidades de medida
+ * NO permite actualizar campos de inventario
+ */
+export const actualizarProducto = async (req, res, next) => {
+  try {
+    const id_producto = req.params.id; // VARCHAR
+    const { descripcion, precio_venta, precio_compra, id_categoria, id_marca, id_um_compra, id_um_venta } = req.body;
+
+    // Validar que el producto existe
+    const producto = await prisma.producto.findUnique({
+      where: { id_producto }
+    });
+
+    if (!producto) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'El producto no existe',
+        data: null
+      });
+    }
+
+    // Construir objeto de datos a actualizar (solo campos permitidos)
+    const dataActualizar = {};
+
+    if (descripcion !== undefined) {
+      dataActualizar.descripcion = descripcion;
+    }
+
+    if (precio_venta !== undefined) {
+      if (precio_venta <= 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'El precio de venta debe ser un valor numérico positivo',
+          data: null
+        });
+      }
+      dataActualizar.precioVenta = precio_venta;
+    }
+
+    if (precio_compra !== undefined) {
+      if (precio_compra <= 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'El precio de compra debe ser un valor numérico positivo',
+          data: null
+        });
+      }
+      dataActualizar.precioCompra = precio_compra;
+    }
+
+    if (id_categoria !== undefined) {
+      // Validar que la nueva categoría existe
+      const categoria = await prisma.categoria.findUnique({
+        where: { id_categoria }
+      });
+
+      if (!categoria) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'La categoría especificada no existe',
+          data: null
+        });
+      }
+      dataActualizar.categoriaId = id_categoria;
+    }
+
+    if (id_marca !== undefined) {
+      dataActualizar.marcaId = id_marca;
+    }
+
+    if (id_um_compra !== undefined) {
+      dataActualizar.unidadMedidaIdCompra = id_um_compra;
+    }
+
+    if (id_um_venta !== undefined) {
+      dataActualizar.unidadMedidaId = id_um_venta;
+    }
+
+    // Actualizar el producto
+    const productoActualizado = await prisma.producto.update({
+      where: { id_producto },
+      data: dataActualizar,
+      include: {
+        categoria: true,
+        unidadMedida: true
+      }
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Producto actualizado correctamente',
+      data: productoActualizado
+    });
+  } catch (err) {
+    next(err);
+  }
+};
 
 /**
  * DELETE /api/v1/productos/:id
@@ -314,23 +414,46 @@ export const ajustarStock = async (req, res, next) => {
     // Actualizar ajustes según el tipo
     const ajuste = tipo === 'INC' ? cantidad : -cantidad;
 
-    const productoActualizado = await prisma.producto.update({
-      where: { id_producto: id },
-      data: {
-        ajustes: {
-          increment: ajuste
+    // Usar transacción para actualizar producto y registrar ajuste
+    const resultado = await prisma.$transaction(async (tx) => {
+      // 1. Actualizar el producto
+      const productoActualizado = await tx.producto.update({
+        where: { id_producto: id },
+        data: {
+          ajustes: {
+            increment: ajuste
+          }
         }
-      }
-    });
+      });
 
-    // TODO: Registrar en tabla de ajuste_inventario para auditoría
+      // 2. Crear registro en ajuste_inventario
+      const ajusteInventario = await tx.ajuste_inventario.create({
+        data: {
+          descripcion: motivo || 'Ajuste manual de inventario',
+          tipo: tipo === 'INC' ? 'E' : 'S', // E=Entrada, S=Salida
+          num_productos: 1,
+          estado: 'ACT'
+        }
+      });
+
+      // 3. Crear detalle del ajuste en detalle_ajuste
+      await tx.detalle_ajuste.create({
+        data: {
+          id_ajuste: ajusteInventario.id_ajuste,
+          id_producto: id,
+          cantidad: Math.abs(ajuste)
+        }
+      });
+
+      return productoActualizado;
+    });
 
     return res.json({
       status: 'success',
       message: 'Stock ajustado correctamente',
       data: {
-        id_producto: productoActualizado.id_producto,
-        saldo_actual: productoActualizado.saldo_actual,
+        id_producto: resultado.id_producto,
+        saldo_actual: resultado.saldo_actual,
         ajuste_aplicado: ajuste
       }
     });

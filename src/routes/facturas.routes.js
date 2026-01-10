@@ -7,7 +7,6 @@ import {
   buscarFacturas,
   crearFactura,
   editarFacturaAbierta,
-  modificarFacturaAprobada,
   anularFactura,
   imprimirFactura
 } from '../controllers/facturas.controller.js';
@@ -29,9 +28,6 @@ router.post('/', verificarToken, crearFactura);
 
 // PUT /api/v1/facturas/:id - Editar factura abierta (Cliente E-commerce)
 router.put('/:id', verificarToken, editarFacturaAbierta);
-
-// PUT /api/v1/facturas/:id/modificar - Modificar factura aprobada mismo día (Admin, POS)
-router.put('/:id/modificar', verificarToken, adminOPos, modificarFacturaAprobada);
 
 // POST /api/v1/facturas/:id/anular - Anular factura (Admin)
 router.post('/:id/anular', verificarToken, soloAdmin, anularFactura);
