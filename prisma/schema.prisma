@@ -59,7 +59,6 @@ model carrito_detalle {
   cantidad        Int
   precio_unitario Decimal   @db.Decimal(14, 3)
   subtotal        Decimal   @db.Decimal(14, 3)
-  estado          String?   @default("ACT") @db.Char(3)
   fecha_agregado  DateTime? @default(now()) @db.Timestamp(6)
   carrito         carrito   @relation(fields: [id_carrito], references: [id_carrito], onDelete: Cascade, onUpdate: NoAction)
   producto        producto  @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
@@ -87,7 +86,7 @@ model categoria_promocion {
 
 model ciudad {
   id_ciudad   String      @id @db.Char(3)
-  descripcion String
+  descripcion String      @db.VarChar(20)
   cliente     cliente[]
   proveedor   proveedor[]
   sucursal    sucursal[]
@@ -143,7 +142,6 @@ model detalle_compra {
   costo_unitario    Decimal  @db.Decimal(14, 3)
   subtotal          Decimal  @db.Decimal(14, 3)
   cantidad_recibida Int?     @default(0)
-  estado            String?  @default("ACT") @db.Char(3)
   compra            compra   @relation(fields: [id_compra], references: [id_compra], onDelete: Cascade, onUpdate: NoAction)
   producto          producto @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
 
@@ -155,7 +153,6 @@ model detalle_recepcion {
   id_producto         String    @db.VarChar(7)
   cantidad_solicitada Int
   cantidad_recibida   Int
-  estado              String?   @default("ACT") @db.Char(3)
   producto            producto  @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
   recepcion           recepcion @relation(fields: [id_recepcion], references: [id_recepcion], onDelete: Cascade, onUpdate: NoAction)
 
@@ -213,7 +210,6 @@ model factura_detalle {
   cantidad        Int
   precio_unitario Decimal  @db.Decimal(14, 3)
   subtotal        Decimal  @db.Decimal(14, 3)
-  estado          String?  @default("ACT") @db.Char(3)
   factura         factura  @relation(fields: [id_factura], references: [id_factura], onDelete: Cascade, onUpdate: NoAction)
   producto        producto @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
 
@@ -287,7 +283,6 @@ model producto {
 model producto_favorito {
   id_cliente     Int
   id_producto    String    @db.VarChar(7)
-  estado         String?   @default("ACT") @db.Char(3)
   fecha_creacion DateTime? @default(now()) @db.Timestamp(6)
   cliente        cliente   @relation(fields: [id_cliente], references: [id_cliente], onDelete: Cascade, onUpdate: NoAction)
   producto       producto  @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
@@ -389,7 +384,7 @@ model unidad_medida {
 
 model usuario {
   id_usuario     Int       @id @default(autoincrement())
-  email          String    @unique
+  usuario        String    @unique(map: "usuario_email_key")
   password_hash  String
   estado         String?   @default("ACT") @db.Char(3)
   fecha_creacion DateTime? @default(now()) @db.Timestamp(6)
