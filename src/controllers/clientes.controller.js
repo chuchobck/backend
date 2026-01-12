@@ -2,6 +2,47 @@
 import prisma from '../lib/prisma.js';
 
 /**
+ * Validar cédula ecuatoriana usando algoritmo Módulo 10
+ * @param {string} cedula - Cédula a validar (10 dígitos)
+ * @returns {boolean} - true si es válida, false si no
+ */
+function validarCedulaEcuatoriana(cedula) {
+  // Verificar que tenga 10 dígitos
+  if (cedula.length !== 10) return false;
+  
+  // Verificar que sean solo números
+  if (!/^\d+$/.test(cedula)) return false;
+  
+  // Verificar que los dos primeros dígitos correspondan a una provincia válida (01-24)
+  const provincia = parseInt(cedula.substring(0, 2));
+  if (provincia < 1 || provincia > 24) return false;
+  
+  // Algoritmo Módulo 10
+  const digitoVerificador = parseInt(cedula.charAt(9));
+  let suma = 0;
+  
+  for (let i = 0; i < 9; i++) {
+    let digito = parseInt(cedula.charAt(i));
+    
+    // Los dígitos en posiciones impares (0,2,4,6,8) se multiplican por 2
+    if (i % 2 === 0) {
+      digito *= 2;
+      // Si el resultado es mayor a 9, se resta 9
+      if (digito > 9) digito -= 9;
+    }
+    // Los dígitos en posiciones pares (1,3,5,7) se dejan igual
+    
+    suma += digito;
+  }
+  
+  // Calcular el dígito verificador
+  const residuo = suma % 10;
+  const resultado = residuo === 0 ? 0 : 10 - residuo;
+  
+  return resultado === digitoVerificador;
+}
+
+/**
  * GET /api/v1/clientes
  * F4.4.1 - Consulta general de clientes
  */
@@ -126,57 +167,114 @@ export const buscarClientes = async (req, res, next) => {
 
 /**
  * POST /api/v1/clientes
- * Ingresar clienteD
+ * F4.1 - Ingreso de cliente
+ * Caso de uso completo con todas las validaciones
  */
 export const crearCliente = async (req, res, next) => {
   try {
     const {
-      id_cliente,
       nombre1,
       nombre2,
       apellido1,
       apellido2,
       ruc_cedula,
       telefono,
-      celular,
       email,
       direccion,
-      id_ciudad
+      id_ciudad,
+      origen,
+      id_usuario
     } = req.body;
 
-    // E5: Datos obligatorios
-    if (!id_cliente || !nombre1 || !apellido1 || !ruc_cedula || !id_ciudad) {
+    // E4: Validar campos obligatorios
+    if (!nombre1 || !apellido1 || !ruc_cedula) {
       return res.status(400).json({
         status: 'error',
-        message: 'Campos obligatorios faltantes',
+        message: 'Complete todos los campos requeridos',
         data: null
       });
     }
 
-    await prisma.cliente.create({
+    // E3: Validar cédula ecuatoriana
+    if (!validarCedulaEcuatoriana(ruc_cedula)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'La cédula ingresada no es válida',
+        data: null
+      });
+    }
+
+    // E2: Verificar si la cédula ya está registrada
+    const clienteExiste = await prisma.cliente.findUnique({
+      where: { ruc_cedula }
+    });
+
+    if (clienteExiste) {
+      return res.status(409).json({
+        status: 'error',
+        message: 'La cédula ya está registrada',
+        data: null
+      });
+    }
+
+    // Validar ciudad si se proporciona
+    if (id_ciudad) {
+      const ciudadExiste = await prisma.ciudad.findUnique({
+        where: { id_ciudad }
+      });
+
+      if (!ciudadExiste) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'La ciudad especificada no existe',
+          data: null
+        });
+      }
+    }
+
+    // Crear el cliente con estado activo
+    const nuevoCliente = await prisma.cliente.create({
       data: {
-        id_cliente,
         nombre1,
-        nombre2,
+        nombre2: nombre2 || null,
         apellido1,
-        apellido2,
+        apellido2: apellido2 || null,
         ruc_cedula,
-        telefono,
-        celular,
-        email,
-        direccion,
-        id_ciudad,
-        estado: 'ACT'
+        telefono: telefono || null,
+        email: email || null,
+        direccion: direccion || null,
+        id_ciudad: id_ciudad || null,
+        origen: origen || 'POS',
+        estado: 'ACT',
+        id_usuario: id_usuario || null
+      },
+      include: {
+        ciudad: true
       }
     });
 
+    // Paso 7: Mensaje de confirmación
     return res.status(201).json({
       status: 'success',
-      message: 'Cliente creado correctamente',
-      data: null
+      message: 'Cliente registrado exitosamente',
+      data: nuevoCliente
     });
   } catch (err) {
-    next(err);
+    // E1: Error de conexión con base de datos
+    if (err.code === 'P2002') {
+      return res.status(409).json({
+        status: 'error',
+        message: 'La cédula ya está registrada',
+        data: null
+      });
+    }
+    
+    console.error('Error al crear cliente:', err);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Error de conexión con la base de datos',
+      data: null
+    });
   }
 };
 /**
