@@ -125,34 +125,24 @@ export const buscarFacturas = async (req, res, next) => {
 };
 
 /**
- * F5.1 – Ingreso de factura (Local / Online)
+ * F5.1 – Ingreso de factura (desde carrito - requiere login en checkout)
  * POST /api/v1/facturas
  * Body esperado:
  * {
  *   "clienteId": 1,
- *   "detalles": [
- *     { "id_producto": "PRO0001", "cantidad": 2 },
- *     { "id_producto": "PRO0002", "cantidad": 1 }
- *   ],
- *   "canal": "POS",
- *   "id_carrito": "uuid...",
+ *   "id_carrito": "uuid...",  // UUID del carrito
  *   "id_metodo_pago": 1,
  *   "id_sucursal": 1
  * }
+ * 
+ * Nota: El canal se determina automáticamente:
+ * - WEB: si viene de e-commerce (carrito con session_id originalmente)
+ * - POS: si viene del sistema POS
  */
 export const crearFactura = async (req, res, next) => {
   try {
-    const { clienteId, detalles, canal, id_carrito, id_metodo_pago, id_sucursal } = req.body;
-    const id_empleado = req.usuario?.id_empleado || null;
-
-    // Validar que pedidoId NO viene en el body
-    if (req.body.pedidoId) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'La creación desde pedido no está implementada',
-        data: null
-      });
-    }
+    const { clienteId, id_carrito, id_metodo_pago, id_sucursal } = req.body;
+    const id_empleado = req.usuario?.id_empleado || null; // Solo si viene desde POS
 
     // Validaciones básicas
     if (!clienteId) {
@@ -163,18 +153,10 @@ export const crearFactura = async (req, res, next) => {
       });
     }
 
-    if (!canal || !['POS', 'WEB'].includes(canal)) {
+    if (!id_carrito) {
       return res.status(400).json({ 
         status: 'error', 
-        message: 'Canal inválido (POS | WEB)', 
-        data: null 
-      });
-    }
-
-    if (!detalles || detalles.length === 0) {
-      return res.status(400).json({ 
-        status: 'error', 
-        message: 'Debe enviar detalles de la factura', 
+        message: 'Carrito es requerido', 
         data: null 
       });
     }
@@ -208,20 +190,52 @@ export const crearFactura = async (req, res, next) => {
       });
     }
 
-    // Validar que canal existe
-    const canalVenta = await prisma.canal_venta.findUnique({
-      where: { id_canal: canal }
+    // Validar que el carrito existe y está activo
+    const carrito = await prisma.carrito.findUnique({
+      where: { id_carrito },
+      include: {
+        carrito_detalle: {
+          include: { producto: true }
+        }
+      }
     });
 
-    if (!canalVenta) {
+    if (!carrito) {
       return res.status(404).json({
         status: 'error',
-        message: 'El canal no existe',
+        message: 'El carrito no existe',
         data: null
       });
     }
 
-    // Validar que método de pago existe
+    if (carrito.estado !== 'ACT') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'El carrito no está activo',
+        data: null
+      });
+    }
+
+    if (carrito.id_cliente !== Number(clienteId)) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'El carrito no pertenece a este cliente',
+        data: null
+      });
+    }
+
+    if (carrito.carrito_detalle.length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'El carrito está vacío',
+        data: null
+      });
+    }
+
+    // Determinar canal: WEB para e-commerce, POS para punto de venta
+    const canal = id_empleado ? 'POS' : 'WEB';
+
+    // Validar que método de pago existe y está disponible para el canal
     const metodoPago = await prisma.metodo_pago.findUnique({
       where: { id_metodo_pago: Number(id_metodo_pago) }
     });
@@ -230,6 +244,22 @@ export const crearFactura = async (req, res, next) => {
       return res.status(404).json({
         status: 'error',
         message: 'El método de pago no existe',
+        data: null
+      });
+    }
+
+    if (canal === 'WEB' && !metodoPago.disponible_web) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'El método de pago no está disponible para compras en línea',
+        data: null
+      });
+    }
+
+    if (canal === 'POS' && !metodoPago.disponible_pos) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'El método de pago no está disponible en POS',
         data: null
       });
     }
@@ -247,34 +277,31 @@ export const crearFactura = async (req, res, next) => {
       });
     }
 
-    // Validar todos los productos y calcular totales
-    let subtotal = 0;
+    // Validar todos los productos y su disponibilidad
     const detallesValidados = [];
+    let subtotal = 0;
 
-    for (const item of detalles) {
-      const producto = await prisma.producto.findUnique({
-        where: { id_producto: item.id_producto }
-      });
+    for (const item of carrito.carrito_detalle) {
+      const producto = item.producto;
 
-      if (!producto) {
-        return res.status(404).json({
-          status: 'error',
-          message: `El producto ${item.id_producto} no existe`,
-          data: null
-        });
-      }
-
-      const cantidad = Number(item.cantidad);
-      const precio_unitario = Number(item.precio_unitario || producto.precioVenta);
-
-      if (!precio_unitario || precio_unitario <= 0) {
+      if (producto.estado !== 'ACT') {
         return res.status(400).json({
           status: 'error',
-          message: `Precio unitario inválido para producto ${item.id_producto}`,
+          message: `El producto ${producto.descripcion} no está disponible`,
           data: null
         });
       }
 
+      if (producto.saldo_actual < item.cantidad) {
+        return res.status(400).json({
+          status: 'error',
+          message: `Stock insuficiente para ${producto.descripcion}. Disponible: ${producto.saldo_actual}`,
+          data: null
+        });
+      }
+
+      const precio_unitario = Number(item.precio_unitario);
+      const cantidad = Number(item.cantidad);
       const detalle_subtotal = cantidad * precio_unitario;
       subtotal += detalle_subtotal;
 
@@ -288,7 +315,7 @@ export const crearFactura = async (req, res, next) => {
 
     // Obtener el IVA actual
     const iva = await prisma.iva.findFirst({
-      where: { fecha_fin: null }
+      where: { fecha_fin: null, estado: 'V' }
     });
 
     if (!iva) {
@@ -303,9 +330,9 @@ export const crearFactura = async (req, res, next) => {
     const iva_valor = parseFloat((subtotal * porcentaje_iva / 100).toFixed(3));
     const total = parseFloat((subtotal + iva_valor).toFixed(3));
 
-    // Usar transacción para crear factura
+    // Usar transacción para crear factura y desactivar carrito
     const resultado = await prisma.$transaction(async (tx) => {
-      // Generar ID de factura (FAC#### donde #### es el siguiente número)
+      // Generar ID de factura (FAC000001, FAC000002, etc.)
       const ultimaFactura = await tx.factura.findFirst({
         orderBy: { id_factura: 'desc' },
         select: { id_factura: true }
@@ -319,7 +346,7 @@ export const crearFactura = async (req, res, next) => {
         }
       }
 
-      const id_factura = `FAC${String(siguienteNumero).padStart(12, '0')}`;
+      const id_factura = `FAC${String(siguienteNumero).padStart(6, '0')}`;
 
       // Crear factura
       const factura = await tx.factura.create({
@@ -327,19 +354,18 @@ export const crearFactura = async (req, res, next) => {
           id_factura,
           id_canal: canal,
           id_cliente: Number(clienteId),
-          id_carrito: id_carrito || null,
+          id_carrito: id_carrito,
           id_empleado,
           id_sucursal: Number(id_sucursal),
           id_metodo_pago: Number(id_metodo_pago),
           id_iva: iva.id_iva,
           subtotal: parseFloat(subtotal.toFixed(3)),
-          iva_valor: iva_valor,
           total: total,
           estado: 'EMI' // Emitida
         }
       });
 
-      // Crear detalles
+      // Crear detalles de factura
       for (const detalle of detallesValidados) {
         await tx.factura_detalle.create({
           data: {
@@ -350,14 +376,30 @@ export const crearFactura = async (req, res, next) => {
             subtotal: detalle.subtotal
           }
         });
+
+        // Descontar stock del producto
+        await tx.producto.update({
+          where: { id_producto: detalle.id_producto },
+          data: {
+            saldo_actual: {
+              decrement: detalle.cantidad
+            }
+          }
+        });
       }
+
+      // Desactivar carrito (ya fue procesado)
+      await tx.carrito.update({
+        where: { id_carrito },
+        data: { estado: 'PRO' } // Procesado
+      });
 
       return factura;
     });
 
     // Opcional: enviar factura por email si canal = WEB
-    if (canal === 'WEB') {
-      // sendEmailFactura(resultado); // Función opcional
+    if (canal === 'WEB' && cliente.email) {
+      // sendEmailFactura(resultado, cliente.email); // Función opcional
     }
 
     return res.status(201).json({
@@ -367,9 +409,9 @@ export const crearFactura = async (req, res, next) => {
         id_factura: resultado.id_factura,
         fecha: resultado.fecha_emision,
         subtotal: resultado.subtotal,
-        iva_valor: resultado.iva_valor,
         total: resultado.total,
-        estado: resultado.estado
+        estado: resultado.estado,
+        canal
       }
     });
 
@@ -428,7 +470,7 @@ export const editarFacturaAbierta = async (req, res, next) => {
       });
     }
 
-    // Validar que está abierta (EMI = Emitida)
+    // Validar que está emitida (EMI)
     if (factura.estado !== 'EMI') {
       return res.status(400).json({
         status: 'error',
@@ -483,10 +525,9 @@ export const editarFacturaAbierta = async (req, res, next) => {
 
     // Usar transacción para actualizar
     const resultado = await prisma.$transaction(async (tx) => {
-      // Marcar detalles anteriores como inactivos (eliminación lógica)
-      await tx.factura_detalle.updateMany({
-        where: { id_factura },
-        data: { estado: 'INA' }
+      // Eliminar detalles anteriores
+      await tx.factura_detalle.deleteMany({
+        where: { id_factura }
       });
 
       // Crear nuevos detalles
@@ -507,7 +548,6 @@ export const editarFacturaAbierta = async (req, res, next) => {
         where: { id_factura },
         data: {
           subtotal: parseFloat(subtotal.toFixed(3)),
-          iva_valor: iva_valor,
           total: total
         },
         include: {
@@ -526,7 +566,6 @@ export const editarFacturaAbierta = async (req, res, next) => {
       data: {
         id_factura: resultado.id_factura,
         subtotal: resultado.subtotal,
-        iva_valor: resultado.iva_valor,
         total: resultado.total,
         estado: resultado.estado,
         detalles: resultado.factura_detalle
@@ -628,7 +667,7 @@ export const imprimirFactura = async (req, res, next) => {
         cliente: {
           include: { ciudad: true }
         },
-        detalle_factura: { 
+        factura_detalle: { 
           include: { producto: true } 
         },
         iva: true
@@ -642,18 +681,18 @@ export const imprimirFactura = async (req, res, next) => {
         data: null
       });
     }
-    // Formatear datos para impresión
-    const datosImpresion = {
-      // Datos de la factura
-      numero_factura: factura.id_factura,
-      fecha: factura.fecha,
-      estado: factura.estado,
-      estado_texto: {
-        'ABI': 'ABIERTA',
-        'CER': 'CERRADA',
-        'ANU': 'ANULADA',
-        'PEN': 'PENDIENTE'
-      }[factura.estado] || factura.estado,
+  /**
+   * Formatear datos para impresión
+   */
+  const datosImpresion = {
+    // Datos de la factura
+    numero_factura: factura.id_factura,
+    fecha: factura.fecha_emision,
+    estado: factura.estado,
+    estado_texto: {
+      'EMI': 'EMITIDA',
+      'ANU': 'ANULADA'
+    }[factura.estado] || factura.estado,
    
       cliente: {
         identificacion: factura.cliente.ruc_cedula,
@@ -664,7 +703,7 @@ export const imprimirFactura = async (req, res, next) => {
         ciudad: factura.cliente.ciudad?.descripcion
       },
       
-      detalles: factura.detalle_factura.map((d, idx) => ({
+      detalles: factura.factura_detalle.map((d, idx) => ({
         linea: idx + 1,
         codigo: d.id_producto,
         descripcion: d.producto.descripcion,

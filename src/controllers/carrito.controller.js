@@ -1,74 +1,107 @@
 // =============================================
 // 🛒 CARRITO CONTROLLER
+// Flujo: sessionId (no logeado) → Login → Asociar a cliente → Checkout (requiere login) → Factura
 // =============================================
 import prisma from '../lib/prisma.js';
 import { Decimal } from '@prisma/client/runtime/library';
 
 /**
- * GET /api/v1/carrito?usuarioId=1
- * Obtener carrito de un usuario
- * Frontend: Llamar en mounted/useEffect con el id del usuario logueado
+ * GET /api/v1/carrito?sessionId=xxx&clienteId=xxx
+ * Obtener carrito por sessionId (no logeado) o clienteId (logeado)
+ * - Si clienteId: buscar carrito del cliente
+ * - Si sessionId: buscar carrito por session (sin cliente)
  */
-export const obtenerCarritoUsuario = async (req, res, next) => {
+export const obtenerCarrito = async (req, res, next) => {
   try {
-    const usuarioId = parseInt(req.query.usuarioId);
+    const { sessionId, clienteId } = req.query;
 
-    if (!usuarioId || isNaN(usuarioId)) {
+    if (!sessionId && !clienteId) {
       return res.status(400).json({
         status: 'error',
-        message: 'ID de usuario es requerido y debe ser un número válido',
+        message: 'Se requiere sessionId o clienteId',
         data: null
       });
     }
 
-    // Buscar carrito activo del usuario SIN pedido asociado
-    const carrito = await prisma.carrito.findFirst({
-      where: { 
-        id_usuario: usuarioId, 
-        estado: 'ACT',
-        pedido: null  // Solo carritos sin pedido
-      },
-      include: { 
-        carrito_detalle: { 
-          include: { 
-            producto: {
-              select: {
-                id_producto: true,
-                descripcion: true,
-                precio_venta: true,
-                imagen_url: true,
-                saldo_actual: true,
-                estado: true,
-                marca: {
-                  select: {
-                    id_marca: true,
-                    nombre: true
+    let carrito;
+
+    // Priorizar búsqueda por cliente si está logeado
+    if (clienteId) {
+      carrito = await prisma.carrito.findFirst({
+        where: { 
+          id_cliente: parseInt(clienteId), 
+          estado: 'ACT'
+        },
+        include: { 
+          carrito_detalle: { 
+            include: { 
+              producto: {
+                select: {
+                  id_producto: true,
+                  descripcion: true,
+                  precioVenta: true,
+                  imagen_url: true,
+                  saldo_actual: true,
+                  estado: true,
+                  marca: {
+                    select: {
+                      id_marca: true,
+                      nombre: true
+                    }
                   }
                 }
               }
-            }
+            },
+            orderBy: { fecha_agregado: 'desc' }
           },
-          orderBy: { fecha_agregado: 'desc' }
-        },
-        usuario: {
-          select: {
-            id_usuario: true,
-            email: true
-          }
-        },
-        canal_venta: {
-          select: {
-            id_canal: true,
-            descripcion: true
+          cliente: {
+            select: {
+              id_cliente: true,
+              nombre1: true,
+              apellido1: true,
+              email: true
+            }
           }
         }
-      }
-    });
+      });
+    } else if (sessionId) {
+      // Buscar por session_id (usuario no logeado)
+      carrito = await prisma.carrito.findFirst({
+        where: { 
+          session_id: sessionId,
+          id_cliente: null, // Sin cliente asignado
+          estado: 'ACT'
+        },
+        include: { 
+          carrito_detalle: { 
+            include: { 
+              producto: {
+                select: {
+                  id_producto: true,
+                  descripcion: true,
+                  precioVenta: true,
+                  imagen_url: true,
+                  saldo_actual: true,
+                  estado: true,
+                  marca: {
+                    select: {
+                      id_marca: true,
+                      nombre: true
+                    }
+                  }
+                }
+              }
+            },
+            orderBy: { fecha_agregado: 'desc' }
+          }
+        }
+      });
+    }
 
     if (!carrito) {
       return res.json({
         status: 'success',
-        message: 'No hay carrito activo. Puedes crear uno nuevo.',
+        message: 'No hay carrito activo',
         data: null,
         isEmpty: true
       });
@@ -97,126 +130,102 @@ export const obtenerCarritoUsuario = async (req, res, next) => {
 };
 
 /**
- * GET /api/v1/carrito/:id_carrito
- * Obtener carrito por id de carrito (permitir sincronización sin usuario)
- */
-export const obtenerCarritoPorId = async (req, res, next) => {
-  try {
-    const { id_carrito } = req.params;
-
-    if (!id_carrito) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'id_carrito es requerido',
-        data: null
-      });
-    }
-
-    const carrito = await obtenerCarritoCompleto(id_carrito);
-
-    if (!carrito) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Carrito no encontrado',
-        data: null
-      });
-    }
-
-    // Validar disponibilidad de productos
-    const productosConValidacion = carrito.carrito_detalle.map(detalle => ({
-      ...detalle,
-      disponible: detalle.producto.estado === 'ACT' && detalle.producto.saldo_actual >= detalle.cantidad,
-      stock_disponible: detalle.producto.saldo_actual
-    }));
-
-    return res.json({
-      status: 'success',
-      message: 'Carrito obtenido exitosamente',
-      data: {
-        ...carrito,
-        carrito_detalle: productosConValidacion,
-        cantidad_items: carrito.carrito_detalle.length,
-        total_productos: carrito.carrito_detalle.reduce((sum, item) => sum + item.cantidad, 0)
-      }
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-/**
  * POST /api/v1/carrito
- * Crear carrito vacío para un usuario
- * Body: { usuarioId: number, id_canal: string }
+ * Crear carrito vacío
+ * Body: { sessionId?: string, clienteId?: number }
  */
 export const crearCarrito = async (req, res, next) => {
   try {
-    const { usuarioId, id_canal = 'WEB' } = req.body;
+    const { sessionId, clienteId } = req.body;
 
-    if (!usuarioId) {
+    if (!sessionId && !clienteId) {
       return res.status(400).json({
         status: 'error',
-        message: 'usuarioId es requerido',
+        message: 'Se requiere sessionId o clienteId',
         data: null
       });
     }
 
-    // Verificar si el usuario existe
-    const usuario = await prisma.usuario.findUnique({
-      where: { id_usuario: parseInt(usuarioId) }
-    });
-
-    if (!usuario) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Usuario no encontrado',
-        data: null
+    // Si hay clienteId, verificar que el cliente existe
+    if (clienteId) {
+      const cliente = await prisma.cliente.findUnique({
+        where: { id_cliente: parseInt(clienteId) }
       });
-    }
 
-    // Verificar si ya tiene carrito activo SIN pedido
-    const carritoExistente = await prisma.carrito.findFirst({
-      where: { 
-        id_usuario: parseInt(usuarioId), 
-        estado: 'ACT',
-        pedido: null  // Solo carritos sin pedido
-      },
-      include: { 
-        carrito_detalle: { 
-          include: { producto: true } 
-        } 
+      if (!cliente) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Cliente no encontrado',
+          data: null
+        });
       }
-    });
 
-    if (carritoExistente) {
-      return res.json({
-        status: 'success',
-        message: 'Ya existe un carrito activo para este usuario',
-        data: carritoExistente,
-        isExisting: true
+      // Verificar si ya tiene carrito activo
+      const carritoExistente = await prisma.carrito.findFirst({
+        where: { 
+          id_cliente: parseInt(clienteId), 
+          estado: 'ACT'
+        },
+        include: { 
+          carrito_detalle: { 
+            include: { producto: true } 
+          } 
+        }
       });
+
+      if (carritoExistente) {
+        return res.json({
+          status: 'success',
+          message: 'Ya existe un carrito activo para este cliente',
+          data: carritoExistente,
+          isExisting: true
+        });
+      }
+    } else if (sessionId) {
+      // Verificar si ya existe carrito con este sessionId
+      const carritoExistente = await prisma.carrito.findFirst({
+        where: { 
+          session_id: sessionId,
+          id_cliente: null,
+          estado: 'ACT'
+        },
+        include: { 
+          carrito_detalle: { 
+            include: { producto: true } 
+          } 
+        }
+      });
+
+      if (carritoExistente) {
+        return res.json({
+          status: 'success',
+          message: 'Ya existe un carrito activo para esta sesión',
+          data: carritoExistente,
+          isExisting: true
+        });
+      }
     }
 
     // Crear nuevo carrito
     const nuevoCarrito = await prisma.carrito.create({
       data: {
-        id_usuario: parseInt(usuarioId),
-        id_canal,
+        id_cliente: clienteId ? parseInt(clienteId) : null,
+        session_id: sessionId || null,
         subtotal: new Decimal(0),
-        descuento: new Decimal(0),
         total: new Decimal(0),
         estado: 'ACT',
         fecha_creacion: new Date()
       },
       include: { 
         carrito_detalle: true,
-        usuario: {
+        cliente: clienteId ? {
           select: {
-            id_usuario: true,
+            id_cliente: true,
+            nombre1: true,
+            apellido1: true,
             email: true
           }
-        },
-        canal_venta: true
+        } : false
       }
     });
 
@@ -233,12 +242,12 @@ export const crearCarrito = async (req, res, next) => {
 /**
  * POST /api/v1/carrito/:id_carrito/productos
  * Agregar producto al carrito
- * Body: { id_producto: string, cantidad: number, precio_referencial?: number }
+ * Body: { id_producto: string, cantidad: number }
  */
-export const agregarProductoCarrito = async (req, res, next) => {
+export const agregarProducto = async (req, res, next) => {
   try {
     const { id_carrito } = req.params;
-    const { id_producto, cantidad = 1, precio_referencial } = req.body;
+    const { id_producto, cantidad = 1 } = req.body;
 
     // Validaciones
     if (!id_producto) {
@@ -257,7 +266,7 @@ export const agregarProductoCarrito = async (req, res, next) => {
       });
     }
 
-    // Verificar que el carrito existe
+    // Verificar que el carrito existe y está activo
     const carrito = await prisma.carrito.findUnique({
       where: { id_carrito }
     });
@@ -299,8 +308,7 @@ export const agregarProductoCarrito = async (req, res, next) => {
       });
     }
 
-    // Usar precio del producto si no se proporciona precio_referencial
-    const precioFinal = precio_referencial ? new Decimal(precio_referencial) : producto.precio_venta;
+    const precioUnitario = producto.precioVenta;
 
     // Verificar si el producto ya está en el carrito
     const detalleExistente = await prisma.carrito_detalle.findUnique({
@@ -336,7 +344,7 @@ export const agregarProductoCarrito = async (req, res, next) => {
         },
         data: {
           cantidad: nuevaCantidad,
-          subtotal: new Decimal(nuevaCantidad).mul(precioFinal)
+          subtotal: new Decimal(nuevaCantidad).mul(precioUnitario)
         }
       });
     } else {
@@ -355,22 +363,19 @@ export const agregarProductoCarrito = async (req, res, next) => {
           id_carrito,
           id_producto,
           cantidad,
-          precio_referencial: precioFinal,
-          subtotal: new Decimal(cantidad).mul(precioFinal),
+          precio_unitario: precioUnitario,
+          subtotal: new Decimal(cantidad).mul(precioUnitario),
           fecha_agregado: new Date()
         }
       });
     }
 
     // Recalcular totales del carrito
-    await recalcularCarrito(id_carrito);
-
-    // Obtener carrito actualizado
-    const carritoActualizado = await obtenerCarritoCompleto(id_carrito);
+    const carritoActualizado = await recalcularCarrito(id_carrito);
 
     return res.json({
       status: 'success',
-      message: detalleExistente ? 'Cantidad actualizada en el carrito' : 'Producto agregado al carrito',
+      message: 'Producto agregado al carrito',
       data: carritoActualizado
     });
   } catch (err) {
@@ -383,7 +388,7 @@ export const agregarProductoCarrito = async (req, res, next) => {
  * Actualizar cantidad de un producto en el carrito
  * Body: { cantidad: number }
  */
-export const actualizarCantidadProducto = async (req, res, next) => {
+export const actualizarCantidad = async (req, res, next) => {
   try {
     const { id_carrito, id_producto } = req.params;
     const { cantidad } = req.body;
@@ -396,7 +401,7 @@ export const actualizarCantidadProducto = async (req, res, next) => {
       });
     }
 
-    // Verificar que existe el detalle
+    // Verificar que el detalle existe
     const detalle = await prisma.carrito_detalle.findUnique({
       where: { 
         id_carrito_id_producto: { 
@@ -434,19 +439,16 @@ export const actualizarCantidadProducto = async (req, res, next) => {
       },
       data: {
         cantidad,
-        subtotal: new Decimal(cantidad).mul(detalle.precio_referencial)
+        subtotal: new Decimal(cantidad).mul(detalle.precio_unitario)
       }
     });
 
-    // Recalcular totales
-    await recalcularCarrito(id_carrito);
-
-    // Obtener carrito actualizado
-    const carritoActualizado = await obtenerCarritoCompleto(id_carrito);
+    // Recalcular totales del carrito
+    const carritoActualizado = await recalcularCarrito(id_carrito);
 
     return res.json({
       status: 'success',
-      message: 'Cantidad actualizada exitosamente',
+      message: 'Cantidad actualizada',
       data: carritoActualizado
     });
   } catch (err) {
@@ -456,13 +458,13 @@ export const actualizarCantidadProducto = async (req, res, next) => {
 
 /**
  * DELETE /api/v1/carrito/:id_carrito/productos/:id_producto
- * Eliminar un producto del carrito
+ * Eliminar producto del carrito
  */
-export const eliminarProductoCarrito = async (req, res, next) => {
+export const eliminarProducto = async (req, res, next) => {
   try {
     const { id_carrito, id_producto } = req.params;
 
-    // Verificar que existe el detalle
+    // Verificar que el detalle existe
     const detalle = await prisma.carrito_detalle.findUnique({
       where: { 
         id_carrito_id_producto: { 
@@ -480,22 +482,18 @@ export const eliminarProductoCarrito = async (req, res, next) => {
       });
     }
 
-    // Marcar producto como inactivo (eliminación lógica)
-    await prisma.carrito_detalle.update({
+    // Eliminar detalle
+    await prisma.carrito_detalle.delete({
       where: { 
         id_carrito_id_producto: { 
           id_carrito, 
           id_producto 
         } 
-      },
-      data: { estado: 'INA' }
+      }
     });
 
-    // Recalcular totales
-    await recalcularCarrito(id_carrito);
-
-    // Obtener carrito actualizado
-    const carritoActualizado = await obtenerCarritoCompleto(id_carrito);
+    // Recalcular totales del carrito
+    const carritoActualizado = await recalcularCarrito(id_carrito);
 
     return res.json({
       status: 'success',
@@ -509,7 +507,7 @@ export const eliminarProductoCarrito = async (req, res, next) => {
 
 /**
  * DELETE /api/v1/carrito/:id_carrito
- * Vaciar carrito completo
+ * Vaciar carrito (eliminar todos los productos)
  */
 export const vaciarCarrito = async (req, res, next) => {
   try {
@@ -528,27 +526,171 @@ export const vaciarCarrito = async (req, res, next) => {
       });
     }
 
-    // Marcar todos los detalles como inactivos (eliminación lógica)
-    await prisma.carrito_detalle.updateMany({ 
-      where: { id_carrito },
-      data: { estado: 'INA' }
+    // Eliminar todos los detalles
+    await prisma.carrito_detalle.deleteMany({
+      where: { id_carrito }
     });
 
-    // Actualizar totales a cero (mantiene estado ACT - no cambia a DEL)
+    // Resetear totales
     const carritoActualizado = await prisma.carrito.update({
       where: { id_carrito },
-      data: { 
-        // NO cambiar estado - solo limpiar totales
-        subtotal: new Decimal(0), 
-        descuento: new Decimal(0),
+      data: {
+        subtotal: new Decimal(0),
         total: new Decimal(0),
         fecha_actualizacion: new Date()
       },
-      include: { 
-        carrito_detalle: true,
-        usuario: {
+      include: {
+        carrito_detalle: true
+      }
+    });
+
+    return res.json({
+      status: 'success',
+      message: 'Carrito vaciado',
+      data: carritoActualizado
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/v1/carrito/:id_carrito/asociar-cliente
+ * Asociar carrito de sesión a un cliente (después de login/registro)
+ * Body: { clienteId: number }
+ */
+export const asociarClienteAlCarrito = async (req, res, next) => {
+  try {
+    const { id_carrito } = req.params;
+    const { clienteId } = req.body;
+
+    if (!clienteId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'clienteId es requerido',
+        data: null
+      });
+    }
+
+    // Verificar que el carrito existe y no tiene cliente
+    const carrito = await prisma.carrito.findUnique({
+      where: { id_carrito },
+      include: { carrito_detalle: true }
+    });
+
+    if (!carrito) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Carrito no encontrado',
+        data: null
+      });
+    }
+
+    if (carrito.id_cliente) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'El carrito ya está asociado a un cliente',
+        data: null
+      });
+    }
+
+    // Verificar que el cliente existe
+    const cliente = await prisma.cliente.findUnique({
+      where: { id_cliente: parseInt(clienteId) }
+    });
+
+    if (!cliente) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Cliente no encontrado',
+        data: null
+      });
+    }
+
+    // Verificar si el cliente ya tiene un carrito activo
+    const carritoClienteExistente = await prisma.carrito.findFirst({
+      where: { 
+        id_cliente: parseInt(clienteId), 
+        estado: 'ACT'
+      },
+      include: { carrito_detalle: true }
+    });
+
+    if (carritoClienteExistente && carritoClienteExistente.id_carrito !== id_carrito) {
+      // Merge: Mover productos del carrito de sesión al carrito del cliente
+      for (const detalle of carrito.carrito_detalle) {
+        const detalleExistente = await prisma.carrito_detalle.findUnique({
+          where: {
+            id_carrito_id_producto: {
+              id_carrito: carritoClienteExistente.id_carrito,
+              id_producto: detalle.id_producto
+            }
+          }
+        });
+
+        if (detalleExistente) {
+          // Sumar cantidades
+          await prisma.carrito_detalle.update({
+            where: {
+              id_carrito_id_producto: {
+                id_carrito: carritoClienteExistente.id_carrito,
+                id_producto: detalle.id_producto
+              }
+            },
+            data: {
+              cantidad: detalleExistente.cantidad + detalle.cantidad,
+              subtotal: new Decimal(detalleExistente.cantidad + detalle.cantidad).mul(detalle.precio_unitario)
+            }
+          });
+        } else {
+          // Mover el detalle al carrito del cliente
+          await prisma.carrito_detalle.create({
+            data: {
+              id_carrito: carritoClienteExistente.id_carrito,
+              id_producto: detalle.id_producto,
+              cantidad: detalle.cantidad,
+              precio_unitario: detalle.precio_unitario,
+              subtotal: detalle.subtotal,
+              fecha_agregado: new Date()
+            }
+          });
+        }
+      }
+
+      // Desactivar carrito de sesión
+      await prisma.carrito.update({
+        where: { id_carrito },
+        data: { estado: 'INA' }
+      });
+
+      // Recalcular totales del carrito del cliente
+      const carritoFinal = await recalcularCarrito(carritoClienteExistente.id_carrito);
+
+      return res.json({
+        status: 'success',
+        message: 'Carrito de sesión fusionado con carrito del cliente',
+        data: carritoFinal,
+        merged: true
+      });
+    }
+
+    // Asociar carrito de sesión al cliente
+    const carritoActualizado = await prisma.carrito.update({
+      where: { id_carrito },
+      data: {
+        id_cliente: parseInt(clienteId),
+        session_id: null, // Limpiar session_id
+        fecha_actualizacion: new Date()
+      },
+      include: {
+        carrito_detalle: {
+          include: { producto: true }
+        },
+        cliente: {
           select: {
-            id_usuario: true,
+            id_cliente: true,
+            nombre1: true,
+            apellido1: true,
             email: true
           }
         }
@@ -557,7 +699,7 @@ export const vaciarCarrito = async (req, res, next) => {
 
     return res.json({
       status: 'success',
-      message: 'Carrito vaciado exitosamente',
+      message: 'Carrito asociado al cliente exitosamente',
       data: carritoActualizado
     });
   } catch (err) {
@@ -570,78 +712,48 @@ export const vaciarCarrito = async (req, res, next) => {
 // =============================================
 
 /**
- * Recalcular subtotal y total del carrito
+ * Recalcular totales del carrito
  */
 async function recalcularCarrito(id_carrito) {
   const detalles = await prisma.carrito_detalle.findMany({
-    where: { 
-      id_carrito,
-      estado: 'ACT'
-    }
-  });
-
-  const subtotal = detalles.reduce((sum, detalle) => {
-    return sum.add(new Decimal(detalle.subtotal));
-  }, new Decimal(0));
-
-  const carrito = await prisma.carrito.findUnique({
     where: { id_carrito }
   });
 
-  const descuento = carrito?.descuento || new Decimal(0);
-  const total = subtotal.sub(descuento);
+  const subtotal = detalles.reduce((sum, d) => sum.add(d.subtotal), new Decimal(0));
+  const total = subtotal; // Si hay descuentos, aplicarlos aquí
 
-  await prisma.carrito.update({
+  const carritoActualizado = await prisma.carrito.update({
     where: { id_carrito },
     data: {
       subtotal,
-      total: total.greaterThan(0) ? total : new Decimal(0),
+      total,
       fecha_actualizacion: new Date()
-    }
-  });
-}
-
-/**
- * Obtener carrito completo con todas las relaciones
- */
-async function obtenerCarritoCompleto(id_carrito) {
-  return await prisma.carrito.findUnique({
-    where: { id_carrito },
+    },
     include: {
       carrito_detalle: {
-        where: { estado: 'ACT' },
-        include: {
-          producto: {
-            select: {
-              id_producto: true,
-              descripcion: true,
-              precio_venta: true,
-              imagen_url: true,
-              saldo_actual: true,
-              estado: true,
-              marca: {
-                select: {
-                  id_marca: true,
-                  nombre: true
-                }
-              }
-            }
-          }
-        },
+        include: { producto: true },
         orderBy: { fecha_agregado: 'desc' }
       },
-      usuario: {
+      cliente: {
         select: {
-          id_usuario: true,
+          id_cliente: true,
+          nombre1: true,
+          apellido1: true,
           email: true
-        }
-      },
-      canal_venta: {
-        select: {
-          id_canal: true,
-          descripcion: true
         }
       }
     }
   });
+
+  return carritoActualizado;
 }
+
+export default {
+  obtenerCarrito,
+  crearCarrito,
+  agregarProducto,
+  actualizarCantidad,
+  eliminarProducto,
+  vaciarCarrito,
+  asociarClienteAlCarrito
+};

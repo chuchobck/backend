@@ -1,43 +1,47 @@
-// 🟢 carrito.routes.ts
+// � carrito.routes.js
 import { Router } from 'express';
 import {
-  obtenerCarritoUsuario,
-  obtenerCarritoPorId,
+  obtenerCarrito,
   crearCarrito,
-  agregarProductoCarrito,
-  actualizarCantidadProducto,
-  eliminarProductoCarrito,
-  vaciarCarrito
+  agregarProducto,
+  actualizarCantidad,
+  eliminarProducto,
+  vaciarCarrito,
+  asociarClienteAlCarrito
 } from '../controllers/carrito.controller.js';
 
 const router = Router();
 
-// 🔹 Obtener carrito de un usuario
-// GET /api/v1/carrito?usuarioId=1
-router.get('/', obtenerCarritoUsuario);
+// 🔹 Obtener carrito por sessionId o clienteId
+// GET /api/v1/carrito?sessionId=xxx&clienteId=xxx
+router.get('/', obtenerCarrito);
 
-// 🔹 Obtener carrito por id de carrito
-// GET /api/v1/carrito/:id_carrito
-router.get('/:id_carrito', obtenerCarritoPorId);
-
-// 🔹 Crear carrito vacío para un usuario
+// 🔹 Crear carrito vacío
 // POST /api/v1/carrito
+// Body: { sessionId?: string, clienteId?: number }
 router.post('/', crearCarrito);
 
 // 🔹 Agregar producto al carrito
 // POST /api/v1/carrito/:id_carrito/productos
-router.post('/:id_carrito/productos', agregarProductoCarrito);
+// Body: { id_producto: string, cantidad: number }
+router.post('/:id_carrito/productos', agregarProducto);
 
 // 🔹 Actualizar cantidad de producto en carrito
 // PUT /api/v1/carrito/:id_carrito/productos/:id_producto
-router.put('/:id_carrito/productos/:id_producto', actualizarCantidadProducto);
+// Body: { cantidad: number }
+router.put('/:id_carrito/productos/:id_producto', actualizarCantidad);
 
 // 🔹 Eliminar producto del carrito
 // DELETE /api/v1/carrito/:id_carrito/productos/:id_producto
-router.delete('/:id_carrito/productos/:id_producto', eliminarProductoCarrito);
+router.delete('/:id_carrito/productos/:id_producto', eliminarProducto);
 
 // 🔹 Vaciar carrito completo
 // DELETE /api/v1/carrito/:id_carrito
 router.delete('/:id_carrito', vaciarCarrito);
+
+// 🔹 Asociar carrito de sesión a un cliente (después de login/registro)
+// POST /api/v1/carrito/:id_carrito/asociar-cliente
+// Body: { clienteId: number }
+router.post('/:id_carrito/asociar-cliente', asociarClienteAlCarrito);
 
 export default router;
