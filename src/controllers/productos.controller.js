@@ -9,8 +9,10 @@ export const listarProductos = async (req, res, next) => {
     const productos = await prisma.producto.findMany({
       where: { estado: 'ACT' },
       include: {
-        categoria: true,
-        unidadMedida: true
+        categoria_producto: true,
+        marca: true,
+        unidad_medida_producto_id_um_compraTounidad_medida: true,
+        unidad_medida_producto_id_um_ventaTounidad_medida: true
       }
     });
 
@@ -39,15 +41,44 @@ export const listarProductos = async (req, res, next) => {
  */
 export const buscarProductos = async (req, res, next) => {
   try {
-    const { id, descripcion, categoriaId, estado, precioMin, precioMax } = req.query;
+    const { id, codigo_barras, descripcion, categoriaId, estado, precioMin, precioMax } = req.query;
 
     // Si se busca por ID, usar findUnique
     if (id) {
       const producto = await prisma.producto.findUnique({
         where: { id_producto: id },
         include: {
-          categoria: true,
-          unidadMedida: true
+          categoria_producto: true,
+          marca: true,
+          unidad_medida_producto_id_um_compraTounidad_medida: true,
+          unidad_medida_producto_id_um_ventaTounidad_medida: true
+        }
+      });
+
+      if (!producto) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Producto no encontrado',
+          data: null
+        });
+      }
+
+      return res.json({
+        status: 'success',
+        message: 'Producto encontrado',
+        data: producto
+      });
+    }
+
+    // Si se busca por código de barras, usar findUnique
+    if (codigo_barras) {
+      const producto = await prisma.producto.findUnique({
+        where: { codigo_barras },
+        include: {
+          categoria_producto: true,
+          marca: true,
+          unidad_medida_producto_id_um_compraTounidad_medida: true,
+          unidad_medida_producto_id_um_ventaTounidad_medida: true
         }
       });
 
@@ -74,7 +105,7 @@ export const buscarProductos = async (req, res, next) => {
     }
 
     if (categoriaId) {
-      whereConditions.categoriaId = Number(categoriaId);
+      whereConditions.id_categoria = Number(categoriaId);
     }
 
     if (estado) {
@@ -82,20 +113,22 @@ export const buscarProductos = async (req, res, next) => {
     }
 
     if (precioMin || precioMax) {
-      whereConditions.precioVenta = {};
+      whereConditions.precio_venta = {};
       if (precioMin) {
-        whereConditions.precioVenta.gte = Number(precioMin);
+        whereConditions.precio_venta.gte = Number(precioMin);
       }
       if (precioMax) {
-        whereConditions.precioVenta.lte = Number(precioMax);
+        whereConditions.precio_venta.lte = Number(precioMax);
       }
     }
 
     const productos = await prisma.producto.findMany({
       where: whereConditions,
       include: {
-        categoria: true,
-        unidadMedida: true
+        categoria_producto: true,
+        marca: true,
+        unidad_medida_producto_id_um_compraTounidad_medida: true,
+        unidad_medida_producto_id_um_ventaTounidad_medida: true
       }
     });
 
@@ -121,31 +154,57 @@ export const buscarProductos = async (req, res, next) => {
 /**
  * POST /api/v1/productos
  * F6.1 Ingreso de Producto
+ * 
+ * NOTA IMPORTANTE: id_producto es autogenerado por la BD (P000001, P000002, etc)
+ * NO se debe enviar en el body
+ * 
+ * Body esperado:
+ * {
+ *   descripcion: string (requerido)
+ *   precio_venta: number (requerido)
+ *   id_um_compra: number (requerido)
+ *   id_um_venta: number (requerido)
+ *   id_categoria: number (opcional)
+ *   id_marca: number (opcional)
+ *   costo_promedio: number (opcional)
+ *   saldo_inicial: number (opcional)
+ *   volumen: number (opcional)
+ *   alcohol_vol: number (opcional)
+ *   origen: string (opcional)
+ *   notas_cata: string (opcional)
+ *   imagen_url: string (opcional)
+ * }
  */
 export const crearProducto = async (req, res, next) => {
   try {
     const {
-      id_producto,
+      codigo_barras,
       descripcion,
-      precioCompra,
-      precioVenta,
-      saldoInicial,
-      categoriaId,
-      unidadMedidaId,
-      proveedorId
+      id_categoria,
+      id_marca,
+      id_um_compra,
+      id_um_venta,
+      precio_venta,
+      costo_promedio,
+      saldo_inicial,
+      volumen,
+      alcohol_vol,
+      origen,
+      notas_cata,
+      imagen_url
     } = req.body;
 
     // E5 – Datos obligatorios
-    if (!id_producto || !descripcion || !precioVenta || !categoriaId || !unidadMedidaId) {
+    if (!descripcion || !precio_venta || !id_um_compra || !id_um_venta) {
       return res.status(400).json({
         status: 'error',
-        message: 'Complete todos los campos requeridos',
+        message: 'Complete todos los campos requeridos: descripcion, precio_venta, id_um_compra, id_um_venta',
         data: null
       });
     }
 
     // E6 – Precio inválido
-    if (precioVenta <= 0) {
+    if (precio_venta <= 0) {
       return res.status(400).json({
         status: 'error',
         message: 'El precio debe ser un valor numérico positivo',
@@ -153,56 +212,101 @@ export const crearProducto = async (req, res, next) => {
       });
     }
 
-    // E2 – Producto duplicado
-    const existeProducto = await prisma.producto.findUnique({
-      where: { id_producto }
-    });
-
-    if (existeProducto) {
-      return res.status(409).json({
-        status: 'error',
-        message: 'El identificador del producto ya existe',
-        data: null
+    // E2 – Producto duplicado (por codigo_barras)
+    if (codigo_barras) {
+      const existeProducto = await prisma.producto.findUnique({
+        where: { codigo_barras }
       });
-    }
 
-    // E3 – Categoría inexistente
-    const categoria = await prisma.categoria.findUnique({
-      where: { id_categoria: categoriaId }
-    });
-    if (!categoria) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'La categoría seleccionada no es válida',
-        data: null
-      });
-    }
-
-    // E4 – Proveedor inexistente (si aplica)
-    if (proveedorId) {
-      const proveedor = await prisma.proveedor.findUnique({
-        where: { id_proveedor: proveedorId }
-      });
-      if (!proveedor) {
-        return res.status(400).json({
+      if (existeProducto) {
+        return res.status(409).json({
           status: 'error',
-          message: 'El proveedor seleccionado no es válido',
+          message: 'El código de barras del producto ya existe',
           data: null
         });
       }
     }
 
+    // E3 – Categoría inexistente (si se proporciona)
+    if (id_categoria) {
+      const categoria = await prisma.categoria_producto.findUnique({
+        where: { id_categoria }
+      });
+      if (!categoria) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'La categoría seleccionada no es válida',
+          data: null
+        });
+      }
+    }
+
+    // Validar marca si se proporciona
+    if (id_marca) {
+      const marca = await prisma.marca.findUnique({
+        where: { id_marca }
+      });
+      if (!marca) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'La marca seleccionada no es válida',
+          data: null
+        });
+      }
+    }
+
+    // Validar unidad de medida de compra
+    const umCompra = await prisma.unidad_medida.findUnique({
+      where: { id_um: id_um_compra }
+    });
+    if (!umCompra) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'La unidad de medida de compra no es válida',
+        data: null
+      });
+    }
+
+    // Validar unidad de medida de venta
+    const umVenta = await prisma.unidad_medida.findUnique({
+      where: { id_um: id_um_venta }
+    });
+    if (!umVenta) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'La unidad de medida de venta no es válida',
+        data: null
+      });
+    }
+
+    // Crear producto (id_producto se genera automáticamente por la BD)
     const nuevoProducto = await prisma.producto.create({
       data: {
-        id_producto,
+        codigo_barras: codigo_barras || null,
         descripcion,
-        precioCompra,
-        precioVenta,
-        saldo_inicial: saldoInicial || 0,
-        categoriaId,
-        unidadMedidaId,
-        proveedorId,
+        id_categoria: id_categoria || null,
+        id_marca: id_marca || null,
+        id_um_compra,
+        id_um_venta,
+        precio_venta,
+        costo_promedio: costo_promedio || 0,
+        saldo_inicial: saldo_inicial || 0,
+        ingresos: 0,
+        egresos: 0,
+        ajustes: 0,
+        saldo_actual: saldo_inicial || 0,
+        volumen: volumen || null,
+        alcohol_vol: alcohol_vol || null,
+        origen: origen || null,
+        notas_cata: notas_cata || null,
+        imagen_url: imagen_url || null,
         estado: 'ACT'
+      },
+      include: {
+        categoria_producto: true,
+        marca: true,
+        unidad_medida_producto_id_um_compraTounidad_medida: true,
+        unidad_medida_producto_id_um_ventaTounidad_medida: true
       }
     });
 
@@ -219,13 +323,27 @@ export const crearProducto = async (req, res, next) => {
 /**
  * PUT /api/v1/productos/:id
  * F6.2 Actualización de producto
- * Permite actualizar: descripcion, precio_venta, precio_compra, categoría, marca, unidades de medida
- * NO permite actualizar campos de inventario
+ * Permite actualizar: descripcion, precio_venta, costo_promedio, categoría, marca, unidades de medida
+ * NO permite actualizar campos de inventario (saldo_inicial, ingresos, egresos, ajustes, saldo_actual)
  */
 export const actualizarProducto = async (req, res, next) => {
   try {
-    const id_producto = req.params.id; // VARCHAR
-    const { descripcion, precio_venta, precio_compra, id_categoria, id_marca, id_um_compra, id_um_venta } = req.body;
+    const id_producto = req.params.id; // VARCHAR (P000001)
+    const { 
+      codigo_barras,
+      descripcion, 
+      precio_venta, 
+      costo_promedio,
+      id_categoria, 
+      id_marca, 
+      id_um_compra, 
+      id_um_venta,
+      volumen,
+      alcohol_vol,
+      origen,
+      notas_cata,
+      imagen_url
+    } = req.body;
 
     // Validar que el producto existe
     const producto = await prisma.producto.findUnique({
@@ -243,6 +361,22 @@ export const actualizarProducto = async (req, res, next) => {
     // Construir objeto de datos a actualizar (solo campos permitidos)
     const dataActualizar = {};
 
+    // E2 – Validar que el nuevo código de barras no esté duplicado
+    if (codigo_barras !== undefined && codigo_barras !== producto.codigo_barras) {
+      const existeCodigoBarras = await prisma.producto.findUnique({
+        where: { codigo_barras }
+      });
+
+      if (existeCodigoBarras) {
+        return res.status(409).json({
+          status: 'error',
+          message: 'El código de barras ya existe en otro producto',
+          data: null
+        });
+      }
+      dataActualizar.codigo_barras = codigo_barras;
+    }
+
     if (descripcion !== undefined) {
       dataActualizar.descripcion = descripcion;
     }
@@ -255,23 +389,23 @@ export const actualizarProducto = async (req, res, next) => {
           data: null
         });
       }
-      dataActualizar.precioVenta = precio_venta;
+      dataActualizar.precio_venta = precio_venta;
     }
 
-    if (precio_compra !== undefined) {
-      if (precio_compra <= 0) {
+    if (costo_promedio !== undefined) {
+      if (costo_promedio < 0) {
         return res.status(400).json({
           status: 'error',
-          message: 'El precio de compra debe ser un valor numérico positivo',
+          message: 'El costo promedio no puede ser negativo',
           data: null
         });
       }
-      dataActualizar.precioCompra = precio_compra;
+      dataActualizar.costo_promedio = costo_promedio;
     }
 
     if (id_categoria !== undefined) {
       // Validar que la nueva categoría existe
-      const categoria = await prisma.categoria.findUnique({
+      const categoria = await prisma.categoria_producto.findUnique({
         where: { id_categoria }
       });
 
@@ -282,19 +416,71 @@ export const actualizarProducto = async (req, res, next) => {
           data: null
         });
       }
-      dataActualizar.categoriaId = id_categoria;
+      dataActualizar.id_categoria = id_categoria;
     }
 
     if (id_marca !== undefined) {
-      dataActualizar.marcaId = id_marca;
+      if (id_marca !== null) {
+        const marca = await prisma.marca.findUnique({
+          where: { id_marca }
+        });
+        if (!marca) {
+          return res.status(404).json({
+            status: 'error',
+            message: 'La marca especificada no existe',
+            data: null
+          });
+        }
+      }
+      dataActualizar.id_marca = id_marca;
     }
 
     if (id_um_compra !== undefined) {
-      dataActualizar.unidadMedidaIdCompra = id_um_compra;
+      const umCompra = await prisma.unidad_medida.findUnique({
+        where: { id_um: id_um_compra }
+      });
+      if (!umCompra) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'La unidad de medida de compra no existe',
+          data: null
+        });
+      }
+      dataActualizar.id_um_compra = id_um_compra;
     }
 
     if (id_um_venta !== undefined) {
-      dataActualizar.unidadMedidaId = id_um_venta;
+      const umVenta = await prisma.unidad_medida.findUnique({
+        where: { id_um: id_um_venta }
+      });
+      if (!umVenta) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'La unidad de medida de venta no existe',
+          data: null
+        });
+      }
+      dataActualizar.id_um_venta = id_um_venta;
+    }
+
+    if (volumen !== undefined) {
+      dataActualizar.volumen = volumen;
+    }
+
+    if (alcohol_vol !== undefined) {
+      dataActualizar.alcohol_vol = alcohol_vol;
+    }
+
+    if (origen !== undefined) {
+      dataActualizar.origen = origen;
+    }
+
+    if (notas_cata !== undefined) {
+      dataActualizar.notas_cata = notas_cata;
+    }
+
+    if (imagen_url !== undefined) {
+      dataActualizar.imagen_url = imagen_url;
     }
 
     // Actualizar el producto
@@ -302,8 +488,10 @@ export const actualizarProducto = async (req, res, next) => {
       where: { id_producto },
       data: dataActualizar,
       include: {
-        categoria: true,
-        unidadMedida: true
+        categoria_producto: true,
+        marca: true,
+        unidad_medida_producto_id_um_compraTounidad_medida: true,
+        unidad_medida_producto_id_um_ventaTounidad_medida: true
       }
     });
 
@@ -323,10 +511,10 @@ export const actualizarProducto = async (req, res, next) => {
  */
 export const eliminarProducto = async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
+    const id_producto = req.params.id; // VARCHAR
 
     const producto = await prisma.producto.findUnique({
-      where: { id_producto: id }
+      where: { id_producto }
     });
 
     if (!producto) {
@@ -346,7 +534,7 @@ export const eliminarProducto = async (req, res, next) => {
     }
 
     await prisma.producto.update({
-      where: { id_producto: id },
+      where: { id_producto },
       data: { estado: 'INA' }
     });
 
@@ -360,9 +548,6 @@ export const eliminarProducto = async (req, res, next) => {
   }
 };
 
-
-
-
 /**
  * POST /api/v1/productos/:id/ajustar-stock
  * Ajustar stock de un producto (ajuste manual)
@@ -372,10 +557,10 @@ export const eliminarProducto = async (req, res, next) => {
  */
 export const ajustarStock = async (req, res, next) => {
   try {
-    const id = req.params.id; // VARCHAR
+    const id_producto = req.params.id; // VARCHAR
     const { cantidad, motivo, tipo } = req.body;
 
-    if (!id) {
+    if (!id_producto) {
       return res.status(400).json({
         status: 'error',
         message: 'ID de producto es requerido',
@@ -400,7 +585,7 @@ export const ajustarStock = async (req, res, next) => {
     }
 
     const producto = await prisma.producto.findUnique({
-      where: { id_producto: id }
+      where: { id_producto }
     });
 
     if (!producto) {
@@ -418,9 +603,12 @@ export const ajustarStock = async (req, res, next) => {
     const resultado = await prisma.$transaction(async (tx) => {
       // 1. Actualizar el producto
       const productoActualizado = await tx.producto.update({
-        where: { id_producto: id },
+        where: { id_producto },
         data: {
           ajustes: {
+            increment: ajuste
+          },
+          saldo_actual: {
             increment: ajuste
           }
         }
@@ -440,7 +628,7 @@ export const ajustarStock = async (req, res, next) => {
       await tx.detalle_ajuste.create({
         data: {
           id_ajuste: ajusteInventario.id_ajuste,
-          id_producto: id,
+          id_producto,
           cantidad: Math.abs(ajuste)
         }
       });
@@ -456,6 +644,46 @@ export const ajustarStock = async (req, res, next) => {
         saldo_actual: resultado.saldo_actual,
         ajuste_aplicado: ajuste
       }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/v1/productos/:id/stock
+ * Consultar stock actual de un producto
+ */
+export const consultarStock = async (req, res, next) => {
+  try {
+    const id_producto = req.params.id;
+
+    const producto = await prisma.producto.findUnique({
+      where: { id_producto },
+      select: {
+        id_producto: true,
+        descripcion: true,
+        saldo_inicial: true,
+        ingresos: true,
+        egresos: true,
+        ajustes: true,
+        saldo_actual: true,
+        estado: true
+      }
+    });
+
+    if (!producto) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Producto no encontrado',
+        data: null
+      });
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Stock consultado correctamente',
+      data: producto
     });
   } catch (err) {
     next(err);

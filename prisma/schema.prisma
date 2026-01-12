@@ -150,6 +150,18 @@ model detalle_compra {
   @@id([id_compra, id_producto])
 }
 
+model detalle_factura {
+  id_factura      String   @db.VarChar(15)
+  id_producto     String   @db.VarChar(7)
+  cantidad        Int
+  precio_unitario Decimal  @db.Decimal(14, 3)
+  subtotal        Decimal  @db.Decimal(14, 3)
+  factura         factura  @relation(fields: [id_factura], references: [id_factura], onDelete: Cascade, onUpdate: NoAction, map: "factura_detalle_id_factura_fkey")
+  producto        producto @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction, map: "factura_detalle_id_producto_fkey")
+
+  @@id([id_factura, id_producto], map: "factura_detalle_pkey")
+}
+
 model detalle_recepcion {
   id_recepcion        Int
   id_producto         String    @db.VarChar(7)
@@ -256,6 +268,7 @@ model producto {
   notas_cata                                         String?
   imagen_url                                         String?
   estado                                             String?              @default("ACT") @db.Char(3)
+  codigo_barras                                      String?              @unique(map: "idx_producto_codigo_barras") @db.VarChar(50)
   carrito_detalle                                    carrito_detalle[]
   detalle_ajuste                                     detalle_ajuste[]
   detalle_compra                                     detalle_compra[]
@@ -379,16 +392,4 @@ model usuario {
   ultimo_acceso  DateTime? @db.Timestamp(6)
   cliente        cliente?
   empleado       empleado?
-}
-
-model detalle_factura {
-  id_factura      String   @db.VarChar(15)
-  id_producto     String   @db.VarChar(7)
-  cantidad        Int
-  precio_unitario Decimal  @db.Decimal(14, 3)
-  subtotal        Decimal  @db.Decimal(14, 3)
-  factura         factura  @relation(fields: [id_factura], references: [id_factura], onDelete: Cascade, onUpdate: NoAction, map: "factura_detalle_id_factura_fkey")
-  producto        producto @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction, map: "factura_detalle_id_producto_fkey")
-
-  @@id([id_factura, id_producto], map: "factura_detalle_pkey")
 }
