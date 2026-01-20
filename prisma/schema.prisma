@@ -67,21 +67,20 @@ model carrito_detalle {
 }
 
 model categoria_producto {
-  id_categoria Int        @id @default(autoincrement())
-  nombre       String
-  descripcion  String?
-  activo       Boolean?   @default(true)
-  marca        marca[]
-  producto     producto[]
+  id_prod_categoria Int        @id @default(autoincrement())
+  nombre            String
+  descripcion       String?
+  activo            Boolean?   @default(true)
+  marca             marca[]
+  producto          producto[]
 }
 
 model categoria_promocion {
-  id          Int         @id @default(autoincrement())
-  nombre      String
-  descripcion String?
-  orden       Int?
-  activo      Boolean?    @default(true)
-  promocion   promocion[]
+  id_prom_categoria Int         @id @default(autoincrement())
+  nombre            String
+  descripcion       String?
+  activo            Boolean?    @default(true)
+  promocion         promocion[]
 }
 
 model ciudad {
@@ -117,12 +116,10 @@ model cliente {
 model compra {
   id_compra      String           @id @default(dbgenerated("('C'::text || lpad((nextval('seq_compra'::regclass))::text, 6, '0'::text))")) @db.VarChar(7)
   id_proveedor   String           @db.VarChar(7)
-  id_iva         Int
   fecha          DateTime?        @default(now()) @db.Date
   subtotal       Decimal          @db.Decimal(14, 3)
   total          Decimal          @db.Decimal(14, 3)
   estado         String?          @default("PEN") @db.Char(3)
-  iva            iva              @relation(fields: [id_iva], references: [id_iva], onDelete: NoAction, onUpdate: NoAction)
   proveedor      proveedor        @relation(fields: [id_proveedor], references: [id_proveedor], onDelete: NoAction, onUpdate: NoAction)
   detalle_compra detalle_compra[]
   recepcion      recepcion[]
@@ -162,6 +159,20 @@ model detalle_factura {
   @@id([id_factura, id_producto], map: "factura_detalle_pkey")
 }
 
+model detalle_promocion {
+  id_promocion Int
+  id_producto  String    @db.VarChar(7)
+  cantidad     Int
+  es_principal Boolean   @default(false)
+  orden        Int?
+  producto     producto  @relation(fields: [id_producto], references: [id_producto], onDelete: Cascade, map: "fk_detalle_promocion_producto")
+  promocion    promocion @relation(fields: [id_promocion], references: [id_promocion], onDelete: Cascade, map: "fk_detalle_promocion_promocion")
+
+  @@id([id_promocion, id_producto], map: "pk_detalle_promocion")
+  @@index([es_principal], map: "idx_detalle_promocion_es_principal")
+  @@index([id_producto], map: "idx_detalle_promocion_producto")
+}
+
 model detalle_recepcion {
   id_recepcion        Int
   id_producto         String    @db.VarChar(7)
@@ -194,7 +205,7 @@ model empleado {
 }
 
 model factura {
-  id_factura      String            @id @default(dbgenerated("('FAC-'::text || lpad((nextval('seq_factura'::regclass))::text, 6, '0'::text))")) @db.VarChar(15)
+  id_factura      String            @id @db.VarChar(15)
   id_canal        String            @db.Char(3)
   id_cliente      Int
   id_carrito      String?           @unique @db.Uuid
@@ -217,13 +228,22 @@ model factura {
   sucursal        sucursal          @relation(fields: [id_sucursal], references: [id_sucursal], onDelete: NoAction, onUpdate: NoAction)
 }
 
+model fotos {
+  id_foto     Int      @id @default(autoincrement())
+  id_producto String   @db.VarChar(7)
+  descripcion String?
+  producto    producto @relation(fields: [id_producto], references: [id_producto], onDelete: Cascade, map: "fk_foto_producto")
+  marca       marca[]
+
+  @@index([id_producto], map: "idx_foto_id_producto")
+}
+
 model iva {
   id_iva       Int       @id @default(autoincrement())
   porcentaje   Decimal   @db.Decimal(5, 2)
   fecha_inicio DateTime  @db.Date
   fecha_fin    DateTime? @db.Date
   estado       String    @db.Char(1)
-  compra       compra[]
   factura      factura[]
 }
 
@@ -231,9 +251,10 @@ model marca {
   id_marca           Int                @id @default(autoincrement())
   nombre             String             @unique @db.VarChar(50)
   id_categoria       Int
-  logo_url           String?
   estado             String?            @default("ACT") @db.Char(3)
-  categoria_producto categoria_producto @relation(fields: [id_categoria], references: [id_categoria], onDelete: NoAction, onUpdate: NoAction)
+  id_foto            Int?
+  fotos              fotos?             @relation(fields: [id_foto], references: [id_foto], map: "fk_marca_foto")
+  categoria_producto categoria_producto @relation(fields: [id_categoria], references: [id_prod_categoria], onDelete: NoAction, onUpdate: NoAction)
   producto           producto[]
 }
 
@@ -249,37 +270,37 @@ model metodo_pago {
 }
 
 model producto {
-  id_producto                                        String               @id @default(dbgenerated("('P'::text || lpad((nextval('seq_producto'::regclass))::text, 6, '0'::text))")) @db.VarChar(7)
+  id_producto                                        String              @id @default(dbgenerated("('P'::text || lpad((nextval('seq_producto'::regclass))::text, 6, '0'::text))")) @db.VarChar(7)
   descripcion                                        String
   id_categoria                                       Int?
   id_marca                                           Int?
-  id_um_compra                                       String               @db.Char(3)
-  id_um_venta                                        String               @db.Char(3)
-  costo_promedio                                     Decimal?             @default(0) @db.Decimal(14, 3)
-  precio_venta                                       Decimal              @db.Decimal(14, 3)
-  saldo_inicial                                      Int?                 @default(0)
-  ingresos                                           Int?                 @default(0)
-  egresos                                            Int?                 @default(0)
-  ajustes                                            Int?                 @default(0)
+  id_um_compra                                       String              @db.Char(3)
+  id_um_venta                                        String              @db.Char(3)
+  costo_promedio                                     Decimal?            @default(0) @db.Decimal(14, 3)
+  precio_venta                                       Decimal             @db.Decimal(14, 3)
+  saldo_inicial                                      Int?                @default(0)
   saldo_actual                                       Int?
-  volumen                                            Decimal?             @db.Decimal(10, 2)
-  alcohol_vol                                        Decimal?             @db.Decimal(4, 2)
+  volumen                                            Decimal?            @db.Decimal(10, 2)
+  alcohol_vol                                        Decimal?            @db.Decimal(4, 2)
   origen                                             String?
   notas_cata                                         String?
   imagen_url                                         String?
-  estado                                             String?              @default("ACT") @db.Char(3)
-  codigo_barras                                      String?              @unique(map: "idx_producto_codigo_barras") @db.VarChar(50)
+  estado                                             String?             @default("ACT") @db.Char(3)
+  codigo_barras                                      String?             @unique(map: "idx_producto_codigo_barras") @db.VarChar(50)
+  id_proveedor                                       String              @db.VarChar(7)
   carrito_detalle                                    carrito_detalle[]
   detalle_ajuste                                     detalle_ajuste[]
   detalle_compra                                     detalle_compra[]
   detalle_factura                                    detalle_factura[]
+  detalle_promocion                                  detalle_promocion[]
   detalle_recepcion                                  detalle_recepcion[]
-  categoria_producto                                 categoria_producto?  @relation(fields: [id_categoria], references: [id_categoria], onDelete: NoAction, onUpdate: NoAction)
-  marca                                              marca?               @relation(fields: [id_marca], references: [id_marca], onDelete: NoAction, onUpdate: NoAction)
-  unidad_medida_producto_id_um_compraTounidad_medida unidad_medida        @relation("producto_id_um_compraTounidad_medida", fields: [id_um_compra], references: [id_unidad_medida], onDelete: NoAction, onUpdate: NoAction)
-  unidad_medida_producto_id_um_ventaTounidad_medida  unidad_medida        @relation("producto_id_um_ventaTounidad_medida", fields: [id_um_venta], references: [id_unidad_medida], onDelete: NoAction, onUpdate: NoAction)
+  fotos                                              fotos[]
+  proveedor                                          proveedor           @relation(fields: [id_proveedor], references: [id_proveedor], map: "fk_producto_proveedor")
+  categoria_producto                                 categoria_producto? @relation(fields: [id_categoria], references: [id_prod_categoria], onDelete: NoAction, onUpdate: NoAction)
+  marca                                              marca?              @relation(fields: [id_marca], references: [id_marca], onDelete: NoAction, onUpdate: NoAction)
+  unidad_medida_producto_id_um_compraTounidad_medida unidad_medida       @relation("producto_id_um_compraTounidad_medida", fields: [id_um_compra], references: [id_unidad_medida], onDelete: NoAction, onUpdate: NoAction)
+  unidad_medida_producto_id_um_ventaTounidad_medida  unidad_medida       @relation("producto_id_um_ventaTounidad_medida", fields: [id_um_venta], references: [id_unidad_medida], onDelete: NoAction, onUpdate: NoAction)
   producto_favorito                                  producto_favorito[]
-  promocion_producto                                 promocion_producto[]
 }
 
 model producto_favorito {
@@ -293,48 +314,37 @@ model producto_favorito {
 }
 
 model promocion {
-  id                      Int                  @id @default(autoincrement())
-  id_categoria            Int
+  id_promocion            Int                 @id @default(autoincrement())
+  id_prom_categoria       Int
   nombre                  String
   descripcion             String?
   descripcion_corta       String?
-  precio_original         Decimal?             @db.Decimal(10, 2)
-  precio_promocional      Decimal?             @db.Decimal(10, 2)
-  porcentaje_descuento    Decimal?             @db.Decimal(5, 2)
-  fecha_inicio            DateTime             @db.Timestamp(6)
-  fecha_fin               DateTime             @db.Timestamp(6)
+  precio_original         Decimal?            @db.Decimal(10, 2)
+  precio_promocional      Decimal?            @db.Decimal(10, 2)
+  porcentaje_descuento    Decimal?            @db.Decimal(5, 2)
+  fecha_inicio            DateTime            @db.Timestamp(6)
+  fecha_fin               DateTime            @db.Timestamp(6)
   stock_disponible        Int
-  cantidad_vendida        Int?                 @default(0)
+  cantidad_vendida        Int?                @default(0)
   cantidad_maxima_cliente Int?
-  destacado               Boolean?             @default(false)
-  activo                  Boolean?             @default(true)
-  fecha_creacion          DateTime?            @default(now()) @db.Timestamp(6)
-  categoria_promocion     categoria_promocion  @relation(fields: [id_categoria], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  promocion_producto      promocion_producto[]
-}
-
-model promocion_producto {
-  id           Int       @id @default(autoincrement())
-  id_promocion Int
-  id_producto  String    @db.VarChar(7)
-  cantidad     Int
-  es_principal Boolean?  @default(false)
-  orden        Int?
-  producto     producto  @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction)
-  promocion    promocion @relation(fields: [id_promocion], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  estado                  Boolean?            @default(true)
+  fecha_creacion          DateTime?           @default(now()) @db.Timestamp(6)
+  detalle_promocion       detalle_promocion[]
+  categoria_promocion     categoria_promocion @relation(fields: [id_prom_categoria], references: [id_prom_categoria], onDelete: NoAction, onUpdate: NoAction, map: "promocion_id_categoria_fkey")
 }
 
 model proveedor {
-  id_proveedor String   @id @default(dbgenerated("('PR'::text || lpad((nextval('seq_proveedor'::regclass))::text, 5, '0'::text))")) @db.VarChar(7)
-  ruc_cedula   String   @unique @db.VarChar(13)
-  nombre       String
+  id_proveedor String     @id @default(dbgenerated("('PR'::text || lpad((nextval('seq_proveedor'::regclass))::text, 5, '0'::text))")) @db.VarChar(7)
+  ruc_cedula   String     @unique @db.VarChar(13)
+  razon_social String
   telefono     String?
   email        String?
   direccion    String?
-  id_ciudad    String   @db.Char(3)
-  estado       String?  @default("ACT") @db.Char(3)
+  id_ciudad    String     @db.Char(3)
+  estado       String?    @default("ACT") @db.Char(3)
   compra       compra[]
-  ciudad       ciudad   @relation(fields: [id_ciudad], references: [id_ciudad], onDelete: NoAction, onUpdate: NoAction)
+  producto     producto[]
+  ciudad       ciudad     @relation(fields: [id_ciudad], references: [id_ciudad], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model recepcion {

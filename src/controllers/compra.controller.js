@@ -1,4 +1,4 @@
-// src/controllers/compras.controller.js
+// src/controllers/compra.controller.js
 // 🔵 PERSONA 1: Módulo F2 - Gestión de Órdenes de Compra
 
 import prisma from '../lib/prisma.js';

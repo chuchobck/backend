@@ -1,4 +1,4 @@
-// src/routes/productos.routes.js - Rutas de productos
+// src/routes/producto.routes.js - Rutas de producto
 
 import { Router } from 'express';
 import {
@@ -7,7 +7,7 @@ import {
   crearProducto,
   eliminarProducto,
   ajustarStock
-} from '../controllers/productos.controller.js';
+} from '../controllers/producto.controller.js';
 import { verificarToken } from '../middleware/auth.js';
 
 const router = Router();

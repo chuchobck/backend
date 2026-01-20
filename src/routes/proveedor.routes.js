@@ -1,4 +1,4 @@
-// src/routes/proveedores.routes.js - Rutas de proveedores
+// src/routes/proveedor.routes.js - Rutas de proveedor
 // 🔵 PERSONA 1: Módulo F1
 
 import { Router } from 'express';
@@ -9,7 +9,7 @@ import {
   crearProveedor,
   actualizarProveedor,
   eliminarProveedor
-} from '../controllers/proveedores.controller.js';
+} from '../controllers/proveedor.controller.js';
 import { verificarToken } from '../middleware/auth.js';
 import { soloAdmin } from '../middleware/validateRole.js';
 

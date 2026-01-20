@@ -1,10 +1,10 @@
-// src/routes/favoritos.routes.js
+// src/routes/favorito.routes.js
 import { Router } from 'express';
 import {
   listarFavoritos,
   agregarFavorito,
   eliminarFavorito
-} from '../controllers/favoritos.controller.js';
+} from '../controllers/favorito.controller.js';
 
 const router = Router();
 

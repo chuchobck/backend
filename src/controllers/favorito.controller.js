@@ -1,4 +1,4 @@
-// src/controllers/favoritos.controller.js
+// src/controllers/favorito.controller.js
 import prisma from '../lib/prisma.js';
 
 /**

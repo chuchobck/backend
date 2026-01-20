@@ -1,4 +1,4 @@
-// src/routes/compras.routes.js - Rutas de órdenes de compra
+// src/routes/compra.routes.js - Rutas de órdenes de compra
 // 🔵 PERSONA 1: Módulo F2
 
 import { Router } from 'express';
@@ -9,7 +9,7 @@ import {
   crearCompra,
   actualizarCompra,
   anularCompra
-} from '../controllers/compras.controller.js';
+} from '../controllers/compra.controller.js';
 import { verificarToken } from '../middleware/auth.js';
 import { soloAdmin } from '../middleware/validateRole.js';
 

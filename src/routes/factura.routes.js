@@ -1,4 +1,4 @@
-// src/routes/facturas.routes.js - Rutas de facturas
+// src/routes/factura.routes.js - Rutas de factura
 // 🟢 PERSONA 2: Módulo F5 ⭐ EL MÁS COMPLEJO
 
 import { Router } from 'express';
@@ -9,7 +9,7 @@ import {
   editarFacturaAbierta,
   anularFactura,
   imprimirFactura
-} from '../controllers/facturas.controller.js';
+} from '../controllers/factura.controller.js';
 import { verificarToken } from '../middleware/auth.js';
 import { soloAdmin, adminOPos, soloPropiosDatos } from '../middleware/validateRole.js';
 

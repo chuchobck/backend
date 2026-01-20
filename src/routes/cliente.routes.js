@@ -1,4 +1,4 @@
-// src/routes/clientes.routes.js - Rutas de clientes
+// src/routes/cliente.routes.js - Rutas de cliente
 // 🟢 PERSONA 2: Módulo F4
 
 import { Router } from 'express';
@@ -8,7 +8,7 @@ import {
   crearCliente,
   actualizarCliente,
   eliminarCliente
-} from '../controllers/clientes.controller.js';
+} from '../controllers/cliente.controller.js';
 import { verificarToken, verificarTokenOpcional } from '../middleware/auth.js';
 import { adminOPos, soloPropiosDatos } from '../middleware/validateRole.js';
 

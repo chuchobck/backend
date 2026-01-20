@@ -1,4 +1,4 @@
-// src/controllers/proveedores.controller.js
+// src/controllers/proveedor.controller.js
 // 🔵 PERSONA 1: Módulo F1 - Gestión de Proveedores
 import prisma from '../lib/prisma.js';
 
