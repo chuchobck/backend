@@ -10,8 +10,9 @@ import prisma from '../lib/prisma.js';
  */
 export const listarCategorias = async (req, res, next) => {
   try {
+    console.log('📋 Iniciando listarCategorias...');
+    
     const categorias = await prisma.categoria_producto.findMany({
-      where: { activo: true },
       orderBy: { nombre: 'asc' },
       include: {
         _count: {
@@ -20,12 +21,17 @@ export const listarCategorias = async (req, res, next) => {
       }
     });
 
+    console.log(`✅ Categorías encontradas: ${categorias.length}`);
+
+    // Retornar siempre un array, aunque esté vacío
     res.json({
       status: 'success',
-      message: 'Categorías obtenidas exitosamente',
-      data: categorias
+      message: `${categorias.length} categorías obtenidas exitosamente`,
+      data: categorias,
+      total: categorias.length
     });
   } catch (err) {
+    console.error('❌ Error en listarCategorias:', err);
     next(err);
   }
 };
@@ -147,4 +153,72 @@ export const eliminarCategoria = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+};
+
+/**
+ * GET /api/v1/categorias/buscar
+ * Búsqueda flexible de categorías
+ * Query params: nombre, activo
+ */
+export const buscarCategorias = async (req, res, next) => {
+  try {
+    const { nombre, activo } = req.query;
+
+    if (!nombre && typeof activo === 'undefined') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Ingrese al menos un criterio de búsqueda',
+        data: null
+      });
+    }
+
+    const whereClause = {};
+
+    if (nombre) {
+      whereClause.nombre = {
+        contains: nombre,
+        mode: 'insensitive'
+      };
+    }
+
+    if (typeof activo !== 'undefined') {
+      whereClause.activo = String(activo).toLowerCase() === 'true';
+    }
+
+    const categorias = await prisma.categoria_producto.findMany({
+      where: whereClause,
+      orderBy: { nombre: 'asc' },
+      include: {
+        _count: {
+          select: { producto: true, marca: true }
+        }
+      }
+    });
+
+    if (categorias.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'No se encontraron categorías',
+        data: []
+      });
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Búsqueda completada',
+      data: categorias,
+      total_resultados: categorias.length
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export default {
+  listarCategorias,
+  obtenerCategoria,
+  crearCategoria,
+  actualizarCategoria,
+  eliminarCategoria,
+  buscarCategorias
 };

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   listarCategorias,
   obtenerCategoria,
+  buscarCategorias,
   crearCategoria,
   actualizarCategoria,
   eliminarCategoria
@@ -10,6 +11,7 @@ import {
 const router = Router();
 
 router.get('/', listarCategorias);
+router.get('/buscar', buscarCategorias);
 router.get('/:id', obtenerCategoria);
 router.post('/', crearCategoria);
 router.put('/:id', actualizarCategoria);

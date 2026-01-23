@@ -8,6 +8,7 @@ import {
   eliminarProducto,
   ajustarStock
 } from '../controllers/producto.controller.js';
+import { contarProductos } from '../controllers/dashboard.controller.js';
 import { verificarToken } from '../middleware/auth.js';
 
 const router = Router();
@@ -16,6 +17,9 @@ const router = Router();
 
 // GET /api/v1/productos - Listar productos activos (público)
 router.get('/', listarProductos);
+
+// GET /api/v1/productos/count - Contar productos activos
+router.get('/count', contarProductos);
 
 // GET /api/v1/productos/buscar?id=&descripcion=&categoriaId=&estado=&precioMin=&precioMax= - Búsqueda unificada (público)
 // Soporta búsqueda por: id, descripción, categoría, estado, rango de precios

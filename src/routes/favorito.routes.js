@@ -8,16 +8,17 @@ import {
 
 const router = Router();
 
-// Listar favoritos de un usuario
-// GET /api/v1/favoritos?usuarioId=123
+// Listar favoritos de un cliente
+// GET /api/v1/favoritos?clienteId=123
 router.get('/', listarFavoritos);
 
 // Agregar producto a favoritos
 // POST /api/v1/favoritos
+// Body: { clienteId: 1, productoId: "P000001" }
 router.post('/', agregarFavorito);
 
 // Eliminar favorito
-// DELETE /api/v1/favoritos/:id_favorito
-router.delete('/:id_favorito', eliminarFavorito);
+// DELETE /api/v1/favoritos/:productoId?clienteId=123
+router.delete('/:productoId', eliminarFavorito);
 
 export default router;

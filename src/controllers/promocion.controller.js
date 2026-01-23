@@ -408,4 +408,13 @@ export const incrementarVendida = async (req, res, next) => {
   }
 };
 
-export default null;
+export default {
+  listarPromociones,
+  obtenerPromocion,
+  obtenerPromocionesActivas,
+  buscarPromociones,
+  crearPromocion,
+  actualizarPromocion,
+  eliminarPromocion,
+  incrementarVendida
+};

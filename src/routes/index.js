@@ -10,12 +10,13 @@ import bodegaRoutes from './bodega.routes.js';
 import clienteRoutes from './cliente.routes.js';
 import facturaRoutes from './factura.routes.js';
 import productoRoutes from './producto.routes.js';
+import dashboardRoutes from './dashboard.routes.js';
 
 // ========== RUTAS E-COMMERCE ==========
-import catalogoRoutes from './catalogo.routes.js';
 import promocionRoutes from './promocion.routes.js';
 import carritoRoutes from './carrito.routes.js';
 import favoritoRoutes from './favorito.routes.js';
+import paypalRoutes from './paypal.routes.js';
 
 // ========== RUTAS AUXILIARES  ==========
 import ciudadRoutes from './ciudad.routes.js';
@@ -27,7 +28,6 @@ import marcaRoutes from './marca.routes.js';
 import canalVentaRoutes from './canal-venta.routes.js';
 import metodoPagoRoutes from './metodo-pago.routes.js';
 import categoriaPromocionRoutes from './categoria-promocion.routes.js';
-import sucursalRoutes from './sucursal.routes.js';
 import empleadoRoutes from './empleado.routes.js';
 import ajusteInventarioRoutes from './ajusteInventario.routes.js';
 import auditoriaRoutes from './auditoria.routes.js';
@@ -61,11 +61,14 @@ router.use('/facturas', facturaRoutes);
 // F6: Productos (Todos según permisos)
 router.use('/productos', productoRoutes);
 
+// Dashboard - Estadísticas (Admin)
+router.use('/dashboard', dashboardRoutes);
+
 // ===================================
 // E-COMMERCE (RUTAS PÚBLICAS)
 // ===================================
-router.use('/catalogo', catalogoRoutes);
 router.use('/promociones', promocionRoutes);
+router.use('/paypal', paypalRoutes);
 
 // ===================================
 // AUXILIARES 
@@ -80,7 +83,6 @@ router.use('/marcas', marcaRoutes);
 router.use('/canales-venta', canalVentaRoutes);
 router.use('/metodos-pago', metodoPagoRoutes);
 router.use('/categorias-promocion', categoriaPromocionRoutes);
-router.use('/sucursales', sucursalRoutes);
 router.use('/empleados', empleadoRoutes);
 router.use('/ajustes-inventario', ajusteInventarioRoutes);
 router.use('/auditorias', auditoriaRoutes);

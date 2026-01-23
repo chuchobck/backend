@@ -7,8 +7,9 @@ import {
   obtenerRecepcion,
   buscarRecepciones,
   registrarRecepcion,
-  modificarRecepcion,
-  anularRecepcion
+  aprobarRecepcion,
+  anularRecepcion,
+  modificarRecepcion
 } from '../controllers/bodega.controller.js';
 import { verificarToken } from '../middleware/auth.js';
 import { soloAdmin } from '../middleware/validateRole.js';
@@ -21,19 +22,22 @@ router.use(verificarToken, soloAdmin);
 // GET /api/v1/bodega/recepciones - Listar recepciones
 router.get('/recepciones', listarRecepciones);
 
-// GET /api/v1/bodega/recepciones/buscar?compra=&fecha= - Buscar recepciones
+// GET /api/v1/bodega/recepciones/buscar - Buscar recepciones por parámetros
 router.get('/recepciones/buscar', buscarRecepciones);
 
 // GET /api/v1/bodega/recepciones/:id - Obtener recepción con detalle
 router.get('/recepciones/:id', obtenerRecepcion);
 
-// POST /api/v1/bodega/recepciones - Registrar recepción (actualiza stock)
+// POST /api/v1/bodega/recepciones - Registrar recepción
 router.post('/recepciones', registrarRecepcion);
 
-// PUT /api/v1/bodega/recepciones/:id - Modificar recepción (solo ABIERTO)
-router.put('/recepciones/:id', modificarRecepcion);
+// POST /api/v1/bodega/recepciones/:id/aprobar - Aprobar recepción (actualiza stock)
+router.post('/recepciones/:id/aprobar', aprobarRecepcion);
 
-// DELETE /api/v1/bodega/recepciones/:id - Anular recepción (revierte stock)
-router.delete('/recepciones/:id', anularRecepcion);
+// POST /api/v1/bodega/recepciones/:id/anular - Anular recepción (revierte stock)
+router.post('/recepciones/:id/anular', anularRecepcion);
+
+// PUT /api/v1/bodega/recepciones/:id - Modificar cantidades (solo estado ABI)
+router.put('/recepciones/:id', modificarRecepcion);
 
 export default router;

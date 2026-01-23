@@ -7,12 +7,11 @@ import {
   confirmarPagoPayPal
 } from '../controllers/paypal.controller.js';
 import { verificarToken } from '../middleware/auth.js';
-import { soloCliente } from '../middleware/validateRole.js';
 
 const router = Router();
 
-// Todas las rutas requieren autenticación y rol cliente
-router.use(verificarToken, soloCliente);
+// Todas las rutas requieren autenticación
+router.use(verificarToken);
 
 // POST /api/v1/paypal/crear-orden - Crear orden de pago en PayPal
 router.post('/crear-orden', crearOrdenPayPal);

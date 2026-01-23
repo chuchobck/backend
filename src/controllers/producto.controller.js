@@ -36,22 +36,54 @@ export const listarProductos = async (req, res, next) => {
 
 /**
  * GET /api/v1/productos/buscar
- * F6.4.2 - Consulta de productos por parámetros
- * Búsqueda unificada por: id, descripción, categoría, estado, rango de precios
+ * Búsqueda flexible de productos (para e-commerce y backoffice)
+ * Query params: id, codigo_barras, descripcion, categoriaId, marcaId, 
+ *               estado, precioMin, precioMax, volumen, origen, 
+ *               soloDisponibles, ordenarPor, pagina, limite
  */
 export const buscarProductos = async (req, res, next) => {
   try {
-    const { id, codigo_barras, descripcion, categoriaId, estado, precioMin, precioMax } = req.query;
+    const {
+      id,
+      codigo_barras,
+      descripcion,
+      categoriaId,
+      marcaId,
+      estado,
+      precioMin,
+      precioMax,
+      volumen,
+      origen,
+      soloDisponibles,
+      ordenarPor,
+      pagina = 1,
+      limite = 30
+    } = req.query;
 
-    // Si se busca por ID, usar findUnique
+    // 🔷 Búsqueda por ID específico
     if (id) {
       const producto = await prisma.producto.findUnique({
         where: { id_producto: id },
         include: {
-          categoria_producto: true,
-          marca: true,
-          unidad_medida_producto_id_um_compraTounidad_medida: true,
-          unidad_medida_producto_id_um_ventaTounidad_medida: true
+          categoria_producto: {
+            select: {
+              id_prod_categoria: true,
+              nombre: true
+            }
+          },
+          marca: {
+            select: {
+              id_marca: true,
+              nombre: true,
+              imagen_url: true
+            }
+          },
+          unidad_medida_producto_id_um_ventaTounidad_medida: {
+            select: {
+              id_unidad_medida: true,
+              descripcion: true
+            }
+          }
         }
       });
 
@@ -70,14 +102,13 @@ export const buscarProductos = async (req, res, next) => {
       });
     }
 
-    // Si se busca por código de barras, usar findUnique
+    // 🔷 Búsqueda por código de barras
     if (codigo_barras) {
       const producto = await prisma.producto.findUnique({
         where: { codigo_barras },
         include: {
           categoria_producto: true,
           marca: true,
-          unidad_medida_producto_id_um_compraTounidad_medida: true,
           unidad_medida_producto_id_um_ventaTounidad_medida: true
         }
       });
@@ -97,54 +128,146 @@ export const buscarProductos = async (req, res, next) => {
       });
     }
 
-    // Búsqueda con múltiples filtros
-    const whereConditions = {};
+    // 🔷 CONSTRUIR FILTROS DINÁMICAMENTE
+    const whereClause = {};
 
-    if (descripcion) {
-      whereConditions.descripcion = { contains: descripcion, mode: 'insensitive' };
-    }
-
-    if (categoriaId) {
-      whereConditions.id_categoria = Number(categoriaId);
-    }
-
+    // Estado (por defecto solo activos)
     if (estado) {
-      whereConditions.estado = estado;
+      whereClause.estado = estado;
+    } else {
+      whereClause.estado = 'ACT'; // Por defecto solo activos
     }
 
+    // Búsqueda por descripción
+    if (descripcion) {
+      whereClause.descripcion = {
+        contains: descripcion,
+        mode: 'insensitive'
+      };
+    }
+
+    // Filtro por categoría
+    if (categoriaId) {
+      whereClause.id_prod_categoria = parseInt(categoriaId);
+    }
+
+    // Filtro por marca
+    if (marcaId) {
+      whereClause.id_marca = parseInt(marcaId);
+    }
+
+    // Filtro por rango de precios
     if (precioMin || precioMax) {
-      whereConditions.precio_venta = {};
-      if (precioMin) {
-        whereConditions.precio_venta.gte = Number(precioMin);
-      }
-      if (precioMax) {
-        whereConditions.precio_venta.lte = Number(precioMax);
-      }
+      whereClause.precio_venta = {};
+      if (precioMin) whereClause.precio_venta.gte = parseFloat(precioMin);
+      if (precioMax) whereClause.precio_venta.lte = parseFloat(precioMax);
     }
 
+    // Filtro por volumen
+    if (volumen) {
+      whereClause.volumen = parseFloat(volumen);
+    }
+
+    // Filtro por origen
+    if (origen) {
+      whereClause.origen = {
+        contains: origen,
+        mode: 'insensitive'
+      };
+    }
+
+    // Solo productos con stock disponible
+    if (soloDisponibles === 'true') {
+      whereClause.saldo_actual = { gt: 0 };
+    }
+
+    // 🔷 CONFIGURAR ORDENAMIENTO
+    let orderBy = { id_producto: 'desc' }; // Por defecto: más recientes
+
+    if (ordenarPor === 'precio_asc') {
+      orderBy = { precio_venta: 'asc' };
+    } else if (ordenarPor === 'precio_desc') {
+      orderBy = { precio_venta: 'desc' };
+    } else if (ordenarPor === 'nombre' || ordenarPor === 'nombre_asc') {
+      orderBy = { descripcion: 'asc' };
+    } else if (ordenarPor === 'popular') {
+      // Más vendidos = menos stock restante (aproximación)
+      orderBy = { saldo_actual: 'asc' };
+    }
+
+    // 🔷 PAGINACIÓN
+    const skip = (parseInt(pagina) - 1) * parseInt(limite);
+    const take = parseInt(limite);
+
+    // Contar total
+    const totalProductos = await prisma.producto.count({ where: whereClause });
+
+    // Ejecutar búsqueda
     const productos = await prisma.producto.findMany({
-      where: whereConditions,
+      where: whereClause,
+      orderBy,
+      skip,
+      take,
       include: {
-        categoria_producto: true,
-        marca: true,
-        unidad_medida_producto_id_um_compraTounidad_medida: true,
-        unidad_medida_producto_id_um_ventaTounidad_medida: true
+        categoria_producto: {
+          select: {
+            id_prod_categoria: true,
+            nombre: true
+          }
+        },
+        marca: {
+          select: {
+            id_marca: true,
+            nombre: true,
+            imagen_url: true
+          }
+        },
+        unidad_medida_producto_id_um_ventaTounidad_medida: {
+          select: {
+            id_unidad_medida: true,
+            descripcion: true
+          }
+        }
       }
     });
 
-    // E6: Sin resultados
     if (productos.length === 0) {
       return res.status(404).json({
         status: 'error',
         message: 'No se encontraron productos con los criterios especificados',
-        data: []
+        data: [],
+        pagination: {
+          pagina: parseInt(pagina),
+          limite: parseInt(limite),
+          total: 0,
+          totalPaginas: 0
+        }
       });
     }
 
     return res.json({
       status: 'success',
       message: 'Búsqueda completada',
-      data: productos
+      data: productos,
+      total_resultados: totalProductos,
+      pagination: {
+        pagina: parseInt(pagina),
+        limite: parseInt(limite),
+        total: totalProductos,
+        totalPaginas: Math.ceil(totalProductos / parseInt(limite))
+      },
+      criterios_aplicados: {
+        descripcion: descripcion || null,
+        categoriaId: categoriaId || null,
+        marcaId: marcaId || null,
+        estado: estado || 'ACT',
+        precioMin: precioMin || null,
+        precioMax: precioMax || null,
+        volumen: volumen || null,
+        origen: origen || null,
+        soloDisponibles: soloDisponibles || null,
+        ordenarPor: ordenarPor || 'reciente'
+      }
     });
   } catch (err) {
     next(err);

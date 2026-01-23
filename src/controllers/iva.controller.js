@@ -16,7 +16,7 @@ export const listarIva = async (req, res, next) => {
 
     res.json({
       status: 'success',
-      message: 'Configuraciones de IVA obtenidas exitosamente',
+      message: `${ivas.length} configuraciones de IVA encontradas`,
       data: ivas
     });
   } catch (err) {
@@ -47,7 +47,8 @@ export const obtenerIvaActivo = async (req, res, next) => {
     if (!iva) {
       return res.status(404).json({
         status: 'error',
-        message: 'No hay configuración de IVA activa'
+        message: 'No hay configuración de IVA activa para la fecha actual',
+        data: null
       });
     }
 
@@ -67,16 +68,30 @@ export const obtenerIvaActivo = async (req, res, next) => {
  */
 export const obtenerIva = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const id = parseInt(req.params.id);
+
+    if (isNaN(id)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'ID de IVA inválido',
+        data: null
+      });
+    }
 
     const iva = await prisma.iva.findUnique({
-      where: { id_iva: parseInt(id) }
+      where: { id_iva: id },
+      include: {
+        _count: {
+          select: { factura: true }
+        }
+      }
     });
 
     if (!iva) {
       return res.status(404).json({
         status: 'error',
-        message: 'Configuración de IVA no encontrada'
+        message: 'Configuración de IVA no encontrada',
+        data: null
       });
     }
 
@@ -98,18 +113,97 @@ export const crearIva = async (req, res, next) => {
   try {
     const { porcentaje, fecha_inicio, fecha_fin, estado } = req.body;
 
+    // Validaciones básicas
     if (!porcentaje || !fecha_inicio || !estado) {
       return res.status(400).json({
         status: 'error',
-        message: 'porcentaje, fecha_inicio y estado son requeridos'
+        message: 'porcentaje, fecha_inicio y estado son requeridos',
+        data: null
       });
     }
 
+    // Validar porcentaje
+    const porcentajeNum = parseFloat(porcentaje);
+    if (isNaN(porcentajeNum) || porcentajeNum < 0 || porcentajeNum > 100) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'El porcentaje debe ser un número entre 0 y 100',
+        data: null
+      });
+    }
+
+    // Validar estado
+    if (!['A', 'I'].includes(estado)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'El estado debe ser "A" (Activo) o "I" (Inactivo)',
+        data: null
+      });
+    }
+
+    // Validar fechas
+    const fechaInicioDate = new Date(fecha_inicio);
+    if (isNaN(fechaInicioDate.getTime())) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Fecha de inicio inválida',
+        data: null
+      });
+    }
+
+    let fechaFinDate = null;
+    if (fecha_fin) {
+      fechaFinDate = new Date(fecha_fin);
+      if (isNaN(fechaFinDate.getTime())) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Fecha de fin inválida',
+          data: null
+        });
+      }
+
+      // Validar que fecha_fin > fecha_inicio
+      if (fechaFinDate <= fechaInicioDate) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'La fecha de fin debe ser posterior a la fecha de inicio',
+          data: null
+        });
+      }
+    }
+
+    // Validar que no haya solapamiento de rangos si está activo
+    if (estado === 'A') {
+      const solapamiento = await prisma.iva.findFirst({
+        where: {
+          estado: 'A',
+          AND: [
+            { fecha_inicio: { lte: fechaFinDate || new Date('2099-12-31') } },
+            {
+              OR: [
+                { fecha_fin: null },
+                { fecha_fin: { gte: fechaInicioDate } }
+              ]
+            }
+          ]
+        }
+      });
+
+      if (solapamiento) {
+        return res.status(409).json({
+          status: 'error',
+          message: 'Ya existe una configuración de IVA activa para este rango de fechas',
+          data: { iva_existente: solapamiento }
+        });
+      }
+    }
+
+    // Crear IVA
     const iva = await prisma.iva.create({
       data: {
-        porcentaje: parseFloat(porcentaje),
-        fecha_inicio: new Date(fecha_inicio),
-        fecha_fin: fecha_fin ? new Date(fecha_fin) : null,
+        porcentaje: porcentajeNum,
+        fecha_inicio: fechaInicioDate,
+        fecha_fin: fechaFinDate,
         estado
       }
     });
@@ -130,17 +224,115 @@ export const crearIva = async (req, res, next) => {
  */
 export const actualizarIva = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const id = parseInt(req.params.id);
     const { porcentaje, fecha_inicio, fecha_fin, estado } = req.body;
 
+    if (isNaN(id)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'ID de IVA inválido',
+        data: null
+      });
+    }
+
+    // Verificar que existe
+    const ivaExistente = await prisma.iva.findUnique({
+      where: { id_iva: id },
+      include: {
+        _count: {
+          select: { factura: true }
+        }
+      }
+    });
+
+    if (!ivaExistente) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Configuración de IVA no encontrada',
+        data: null
+      });
+    }
+
+    // Si tiene facturas asociadas, solo permitir cambio de estado
+    if (ivaExistente._count.factura > 0) {
+      if (porcentaje !== undefined || fecha_inicio !== undefined || fecha_fin !== undefined) {
+        return res.status(400).json({
+          status: 'error',
+          message: `No se puede modificar porcentaje o fechas. Esta configuración tiene ${ivaExistente._count.factura} facturas asociadas`,
+          data: null
+        });
+      }
+    }
+
     const data = {};
-    if (porcentaje !== undefined) data.porcentaje = parseFloat(porcentaje);
-    if (fecha_inicio !== undefined) data.fecha_inicio = new Date(fecha_inicio);
-    if (fecha_fin !== undefined) data.fecha_fin = fecha_fin ? new Date(fecha_fin) : null;
-    if (estado !== undefined) data.estado = estado;
+
+    // Validar porcentaje
+    if (porcentaje !== undefined) {
+      const porcentajeNum = parseFloat(porcentaje);
+      if (isNaN(porcentajeNum) || porcentajeNum < 0 || porcentajeNum > 100) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'El porcentaje debe ser un número entre 0 y 100',
+          data: null
+        });
+      }
+      data.porcentaje = porcentajeNum;
+    }
+
+    // Validar estado
+    if (estado !== undefined) {
+      if (!['A', 'I'].includes(estado)) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'El estado debe ser "A" (Activo) o "I" (Inactivo)',
+          data: null
+        });
+      }
+      data.estado = estado;
+    }
+
+    // Validar fechas
+    if (fecha_inicio !== undefined) {
+      const fechaInicioDate = new Date(fecha_inicio);
+      if (isNaN(fechaInicioDate.getTime())) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Fecha de inicio inválida',
+          data: null
+        });
+      }
+      data.fecha_inicio = fechaInicioDate;
+    }
+
+    if (fecha_fin !== undefined) {
+      if (fecha_fin === null) {
+        data.fecha_fin = null;
+      } else {
+        const fechaFinDate = new Date(fecha_fin);
+        if (isNaN(fechaFinDate.getTime())) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Fecha de fin inválida',
+            data: null
+          });
+        }
+
+        // Validar coherencia con fecha_inicio
+        const fechaInicio = data.fecha_inicio || ivaExistente.fecha_inicio;
+        if (fechaFinDate <= fechaInicio) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'La fecha de fin debe ser posterior a la fecha de inicio',
+            data: null
+          });
+        }
+
+        data.fecha_fin = fechaFinDate;
+      }
+    }
 
     const iva = await prisma.iva.update({
-      where: { id_iva: parseInt(id) },
+      where: { id_iva: id },
       data
     });
 
@@ -160,7 +352,7 @@ export const actualizarIva = async (req, res, next) => {
  */
 export const eliminarIva = async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
+    const id = parseInt(req.params.id);
 
     if (isNaN(id)) {
       return res.status(400).json({
@@ -172,7 +364,12 @@ export const eliminarIva = async (req, res, next) => {
 
     // Verificar que la configuración existe
     const iva = await prisma.iva.findUnique({
-      where: { id_iva: id }
+      where: { id_iva: id },
+      include: {
+        _count: {
+          select: { factura: true }
+        }
+      }
     });
 
     if (!iva) {
@@ -192,6 +389,12 @@ export const eliminarIva = async (req, res, next) => {
       });
     }
 
+    // Advertir si tiene facturas asociadas
+    let advertencia = null;
+    if (iva._count.factura > 0) {
+      advertencia = `Esta configuración tiene ${iva._count.factura} facturas asociadas`;
+    }
+
     // Actualizar estado a I (Inactivo)
     const ivaDesactivado = await prisma.iva.update({
       where: { id_iva: id },
@@ -201,7 +404,8 @@ export const eliminarIva = async (req, res, next) => {
     res.json({
       status: 'success',
       message: 'Configuración de IVA desactivada correctamente',
-      data: ivaDesactivado
+      data: ivaDesactivado,
+      advertencia
     });
   } catch (err) {
     next(err);

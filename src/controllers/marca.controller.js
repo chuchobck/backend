@@ -463,3 +463,11 @@ export const eliminarMarca = async (req, res, next) => {
     next(err);
   }
 };
+
+export default {
+  listarMarcas,
+  obtenerMarca,
+  crearMarca,
+  actualizarMarca,
+  eliminarMarca
+};

@@ -10,6 +10,7 @@ import { Decimal } from '@prisma/client/runtime/library';
  * Obtener carrito por sessionId (no logeado) o clienteId (logeado)
  * - Si clienteId: buscar carrito del cliente
  * - Si sessionId: buscar carrito por session (sin cliente)
+ * ✅ OPTIMIZADO: Una sola query con OR
  */
 export const obtenerCarrito = async (req, res, next) => {
   try {
@@ -23,80 +24,60 @@ export const obtenerCarrito = async (req, res, next) => {
       });
     }
 
-    let carrito;
+    // Construir cláusula WHERE dinámicamente con OR
+    const whereClause = {
+      estado: 'ACT',
+      OR: []
+    };
 
-    // Priorizar búsqueda por cliente si está logeado
     if (clienteId) {
-      carrito = await prisma.carrito.findFirst({
-        where: { 
-          id_cliente: parseInt(clienteId), 
-          estado: 'ACT'
-        },
-        include: { 
-          carrito_detalle: { 
-            include: { 
-              producto: {
-                select: {
-                  id_producto: true,
-                  descripcion: true,
-                  precio_venta: true,
-                  imagen_url: true,
-                  saldo_actual: true,
-                  estado: true,
-                  marca: {
-                    select: {
-                      id_marca: true,
-                      nombre: true
-                    }
-                  }
-                }
-              }
-            },
-            orderBy: { fecha_agregado: 'desc' }
-          },
-          cliente: {
-            select: {
-              id_cliente: true,
-              nombre1: true,
-              apellido1: true,
-              email: true
-            }
-          }
-        }
-      });
-    } else if (sessionId) {
-      // Buscar por session_id (usuario no logeado)
-      carrito = await prisma.carrito.findFirst({
-        where: { 
-          session_id: sessionId,
-          id_cliente: null, // Sin cliente asignado
-          estado: 'ACT'
-        },
-        include: { 
-          carrito_detalle: { 
-            include: { 
-              producto: {
-                select: {
-                  id_producto: true,
-                  descripcion: true,
-                  precio_venta: true,
-                  imagen_url: true,
-                  saldo_actual: true,
-                  estado: true,
-                  marca: {
-                    select: {
-                      id_marca: true,
-                      nombre: true
-                    }
-                  }
-                }
-              }
-            },
-            orderBy: { fecha_agregado: 'desc' }
-          }
-        }
+      whereClause.OR.push({ 
+        id_cliente: parseInt(clienteId) 
       });
     }
+
+    if (sessionId) {
+      whereClause.OR.push({ 
+        session_id: sessionId,
+        id_cliente: null // Sin cliente asignado
+      });
+    }
+
+    // Una sola query con include completo
+    const carrito = await prisma.carrito.findFirst({
+      where: whereClause,
+      include: { 
+        carrito_detalle: { 
+          include: { 
+            producto: {
+              select: {
+                id_producto: true,
+                descripcion: true,
+                precio_venta: true,
+                imagen_url: true,
+                saldo_actual: true,
+                estado: true,
+                marca: {
+                  select: {
+                    id_marca: true,
+                    nombre: true
+                  }
+                }
+              }
+            }
+          },
+          orderBy: { fecha_agregado: 'desc' }
+        },
+        cliente: {
+          select: {
+            id_cliente: true,
+            nombre1: true,
+            apellido1: true,
+            email: true
+          }
+        }
+      }
+    });
 
     if (!carrito) {
       return res.json({
@@ -119,6 +100,7 @@ export const obtenerCarrito = async (req, res, next) => {
       message: 'Carrito obtenido exitosamente',
       data: {
         ...carrito,
+        id_carrito: carrito.id_carrito, // 🔑 IMPORTANTE: Asegurarse que el frontend captura esto
         carrito_detalle: productosConValidacion,
         cantidad_items: carrito.carrito_detalle.length,
         total_productos: carrito.carrito_detalle.reduce((sum, item) => sum + item.cantidad, 0)
@@ -559,6 +541,11 @@ export const vaciarCarrito = async (req, res, next) => {
  * Asociar carrito de sesión a un cliente (después de login/registro)
  * Body: { clienteId: number }
  */
+/**
+ * POST /api/v1/carrito/:id_carrito/asociar-cliente
+ * Asociar carrito de sesión a un cliente (después de login/registro)
+ * Body: { clienteId: number }
+ */
 export const asociarClienteAlCarrito = async (req, res, next) => {
   try {
     const { id_carrito } = req.params;
@@ -586,6 +573,15 @@ export const asociarClienteAlCarrito = async (req, res, next) => {
       });
     }
 
+    // ✅ VALIDAR que el carrito esté activo
+    if (carrito.estado !== 'ACT') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Solo se pueden asociar carritos activos',
+        data: null
+      });
+    }
+
     if (carrito.id_cliente) {
       return res.status(400).json({
         status: 'error',
@@ -594,7 +590,7 @@ export const asociarClienteAlCarrito = async (req, res, next) => {
       });
     }
 
-    // Verificar que el cliente existe
+    // Verificar que el cliente existe y está activo
     const cliente = await prisma.cliente.findUnique({
       where: { id_cliente: parseInt(clienteId) }
     });
@@ -603,6 +599,15 @@ export const asociarClienteAlCarrito = async (req, res, next) => {
       return res.status(404).json({
         status: 'error',
         message: 'Cliente no encontrado',
+        data: null
+      });
+    }
+
+    // ✅ VALIDAR que el cliente esté activo
+    if (cliente.estado !== 'ACT') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'El cliente no está activo',
         data: null
       });
     }
@@ -657,10 +662,13 @@ export const asociarClienteAlCarrito = async (req, res, next) => {
         }
       }
 
-      // Desactivar carrito de sesión
+      // Desactivar carrito de sesión (cambiar a INA en lugar de eliminar)
       await prisma.carrito.update({
         where: { id_carrito },
-        data: { estado: 'INA' }
+        data: { 
+          estado: 'INA',
+          fecha_actualizacion: new Date()
+        }
       });
 
       // Recalcular totales del carrito del cliente

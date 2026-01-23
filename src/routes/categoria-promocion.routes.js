@@ -4,6 +4,7 @@
 import { Router } from 'express';
 import {
   listarCategoriasPromocion,
+  buscarCategoriasPromocion,
   obtenerCategoriaPromocion,
   crearCategoriaPromocion,
   actualizarCategoriaPromocion,
@@ -16,6 +17,9 @@ const router = Router();
 
 // GET /api/v1/categorias-promocion - Listar categorías activas (público)
 router.get('/', listarCategoriasPromocion);
+
+// GET /api/v1/categorias-promocion/buscar - Buscar categorías (público)
+router.get('/buscar', buscarCategoriasPromocion);
 
 // GET /api/v1/categorias-promocion/:id - Obtener por ID (público)
 router.get('/:id', obtenerCategoriaPromocion);

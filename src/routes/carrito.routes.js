@@ -8,8 +8,7 @@ import {
   eliminarProducto,
   vaciarCarrito,
   asociarClienteAlCarrito
-} from '../controllers/carrito.controller.js';
-
+} from '../controllers/carrito.controller.js';import { validarUUID } from '../middleware/validarUUID.js';
 const router = Router();
 
 // 🔹 Obtener carrito por sessionId o clienteId
@@ -24,24 +23,29 @@ router.post('/', crearCarrito);
 // 🔹 Agregar producto al carrito
 // POST /api/v1/carrito/:id_carrito/productos
 // Body: { id_producto: string, cantidad: number }
-router.post('/:id_carrito/productos', agregarProducto);
+// ✅ Con validación UUID
+router.post('/:id_carrito/productos', validarUUID, agregarProducto);
 
 // 🔹 Actualizar cantidad de producto en carrito
 // PUT /api/v1/carrito/:id_carrito/productos/:id_producto
 // Body: { cantidad: number }
-router.put('/:id_carrito/productos/:id_producto', actualizarCantidad);
+// ✅ Con validación UUID
+router.put('/:id_carrito/productos/:id_producto', validarUUID, actualizarCantidad);
 
 // 🔹 Eliminar producto del carrito
 // DELETE /api/v1/carrito/:id_carrito/productos/:id_producto
-router.delete('/:id_carrito/productos/:id_producto', eliminarProducto);
+// ✅ Con validación UUID
+router.delete('/:id_carrito/productos/:id_producto', validarUUID, eliminarProducto);
 
 // 🔹 Vaciar carrito completo
 // DELETE /api/v1/carrito/:id_carrito
-router.delete('/:id_carrito', vaciarCarrito);
+// ✅ Con validación UUID
+router.delete('/:id_carrito', validarUUID, vaciarCarrito);
 
 // 🔹 Asociar carrito de sesión a un cliente (después de login/registro)
 // POST /api/v1/carrito/:id_carrito/asociar-cliente
 // Body: { clienteId: number }
-router.post('/:id_carrito/asociar-cliente', asociarClienteAlCarrito);
+// ✅ Con validación UUID
+router.post('/:id_carrito/asociar-cliente', validarUUID, asociarClienteAlCarrito);
 
 export default router;

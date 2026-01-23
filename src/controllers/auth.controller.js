@@ -10,7 +10,7 @@ export const login = async (req, res, next) => {
   try {
     let { usuario: usuarioInput, password } = req.body;
 
-    console.log('📝 Login attempt:', { usuario: usuarioInput, hasPassword: !!password });
+    console.log('Login attempt:', { usuario: usuarioInput, hasPassword: !!password });
 
     if (!usuarioInput || !password) {
       return res.status(400).json({
@@ -36,7 +36,7 @@ export const login = async (req, res, next) => {
     });
 
     if (!usuario || usuario.estado !== 'ACT') {
-      console.log('❌ Usuario no encontrado o inactivo');
+      console.log(' Usuario no encontrado o inactivo');
       return res.status(401).json({
         status: 'error',
         message: 'Credenciales inválidas',
@@ -45,7 +45,7 @@ export const login = async (req, res, next) => {
     }
 
     if (!usuario.password_hash) {
-      console.log('❌ Usuario sin password_hash');
+      console.log(' Usuario sin password_hash');
       return res.status(403).json({
         status: 'error',
         message: 'Usuario no habilitado para login web',
@@ -56,7 +56,7 @@ export const login = async (req, res, next) => {
     const passwordValido = await bcrypt.compare(password, usuario.password_hash);
 
     if (!passwordValido) {
-      console.log('❌ Contraseña inválida');
+      console.log(' Contraseña inválida');
       return res.status(401).json({
         status: 'error',
         message: 'Credenciales inválidas',
@@ -64,7 +64,7 @@ export const login = async (req, res, next) => {
       });
     }
 
-    console.log('✅ Login exitoso para:', usuarioNormalized);
+    console.log(' Login exitoso para:', usuarioNormalized);
 
     // Actualizar último acceso
     await prisma.usuario.update({
@@ -102,14 +102,16 @@ export const login = async (req, res, next) => {
             cliente: {
               id_cliente: usuario.cliente.id_cliente,
               nombre: `${usuario.cliente.nombre1} ${usuario.cliente.apellido1}`,
-              ruc_cedula: usuario.cliente.ruc_cedula
+              nombre1: usuario.cliente.nombre1,
+              apellido1: usuario.cliente.apellido1,
+              ruc_cedula: usuario.cliente.ruc_cedula,
+              email: usuario.cliente.email
             }
           }),
           ...(esEmpleado && {
             empleado: {
               id_empleado: usuario.empleado.id_empleado,
-              nombre: `${usuario.empleado.nombre1} ${usuario.empleado.apellido1}`,
-              id_sucursal: usuario.empleado.id_sucursal
+              nombre: `${usuario.empleado.nombre1} ${usuario.empleado.apellido1}`
             }
           })
         }
@@ -230,12 +232,15 @@ export const registro = async (req, res, next) => {
           id_usuario: resultado.usuario.id_usuario,
           usuario: resultado.usuario.usuario,
           rol: 'CLIENTE',
-          tipo_usuario: 'CLIENTE'
-        },
-        cliente: {
-          id_cliente: resultado.cliente.id_cliente,
-          nombre: `${resultado.cliente.nombre1} ${resultado.cliente.apellido1}`,
-          ruc_cedula: resultado.cliente.ruc_cedula
+          tipo_usuario: 'CLIENTE',
+          cliente: {
+            id_cliente: resultado.cliente.id_cliente,
+            nombre: `${resultado.cliente.nombre1} ${resultado.cliente.apellido1}`,
+            nombre1: resultado.cliente.nombre1,
+            apellido1: resultado.cliente.apellido1,
+            ruc_cedula: resultado.cliente.ruc_cedula,
+            email: resultado.cliente.email
+          }
         }
       }
     });
@@ -260,8 +265,7 @@ export const perfil = async (req, res, next) => {
         },
         empleado: {
           include: { 
-            rol: true,
-            sucursal: true 
+            rol: true
           }
         }
       }
