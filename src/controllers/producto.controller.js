@@ -629,6 +629,64 @@ export const actualizarProducto = async (req, res, next) => {
 };
 
 /**
+ * PUT /api/v1/productos/:id/estado
+ * Cambiar estado del producto (ACT o INA)
+ */
+export const cambiarEstadoProducto = async (req, res, next) => {
+  try {
+    const id_producto = req.params.id; // VARCHAR
+    const { estado } = req.body;
+
+    if (!estado || (estado !== 'ACT' && estado !== 'INA')) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Estado debe ser ACT (activo) o INA (inactivo)',
+        data: null
+      });
+    }
+
+    const producto = await prisma.producto.findUnique({
+      where: { id_producto }
+    });
+
+    if (!producto) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'El producto no existe',
+        data: null
+      });
+    }
+
+    if (producto.estado === estado) {
+      return res.status(400).json({
+        status: 'error',
+        message: `El producto ya está ${estado === 'ACT' ? 'activo' : 'inactivo'}`,
+        data: null
+      });
+    }
+
+    const productoActualizado = await prisma.producto.update({
+      where: { id_producto },
+      data: { estado },
+      include: {
+        categoria_producto: true,
+        marca: true,
+        unidad_medida_producto_id_um_compraTounidad_medida: true,
+        unidad_medida_producto_id_um_ventaTounidad_medida: true
+      }
+    });
+
+    res.json({
+      status: 'success',
+      message: `Producto ${estado === 'ACT' ? 'activado' : 'inactivado'} correctamente`,
+      data: productoActualizado
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * DELETE /api/v1/productos/:id
  * F6.3 Eliminación lógica
  */

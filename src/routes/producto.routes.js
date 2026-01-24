@@ -1,10 +1,10 @@
-// src/routes/producto.routes.js - Rutas de producto
-
 import { Router } from 'express';
 import {
   listarProductos,
   buscarProductos,
   crearProducto,
+  actualizarProducto,
+  cambiarEstadoProducto,
   eliminarProducto,
   ajustarStock
 } from '../controllers/producto.controller.js';
@@ -31,7 +31,10 @@ router.get('/buscar', buscarProductos);
 router.post('/', verificarToken, crearProducto);
 
 // PUT /api/v1/productos/:id - Actualizar producto (requiere auth)
-// router.put('/:id', verificarToken, actualizarProducto);
+router.put('/:id', verificarToken, actualizarProducto);
+
+// PUT /api/v1/productos/:id/estado - Cambiar estado (ACT/INA)
+router.put('/:id/estado', verificarToken, cambiarEstadoProducto);
 
 // DELETE /api/v1/productos/:id - Eliminar lógico (requiere auth)
 router.delete('/:id', verificarToken, eliminarProducto);
