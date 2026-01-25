@@ -1,4 +1,0 @@
-name: BACKEND
-owner: mateobenitezcaya
-package: .
-kind: wasmer.io/App.v0

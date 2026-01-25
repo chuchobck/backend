@@ -308,12 +308,18 @@ export const agregarProducto = async (req, res, next) => {
       // Actualizar cantidad existente
       nuevaCantidad = detalleExistente.cantidad + cantidad;
       
-      // Verificar stock disponible
-      if (producto.saldo_actual < nuevaCantidad) {
+      // ✅ Validación mejorada de stock disponible
+      if (nuevaCantidad > producto.saldo_actual) {
         return res.status(400).json({
           status: 'error',
-          message: `Stock insuficiente. Disponible: ${producto.saldo_actual}`,
-          data: { stock_disponible: producto.saldo_actual }
+          message: 'Stock límite alcanzado',
+          error: `No puedes agregar más unidades. Solo hay ${producto.saldo_actual} unidades disponibles de ${producto.descripcion}`,
+          data: { 
+            stock_disponible: producto.saldo_actual,
+            cantidad_en_carrito: detalleExistente.cantidad,
+            cantidad_solicitada: nuevaCantidad,
+            producto_nombre: producto.descripcion
+          }
         });
       }
 
@@ -330,12 +336,17 @@ export const agregarProducto = async (req, res, next) => {
         }
       });
     } else {
-      // Verificar stock disponible
-      if (producto.saldo_actual < cantidad) {
+      // ✅ Validación mejorada de stock disponible para nuevos productos
+      if (cantidad > producto.saldo_actual) {
         return res.status(400).json({
           status: 'error',
-          message: `Stock insuficiente. Disponible: ${producto.saldo_actual}`,
-          data: { stock_disponible: producto.saldo_actual }
+          message: 'Stock límite alcanzado',
+          error: `No puedes agregar ${cantidad} unidades. Solo hay ${producto.saldo_actual} unidades disponibles de ${producto.descripcion}`,
+          data: { 
+            stock_disponible: producto.saldo_actual,
+            cantidad_solicitada: cantidad,
+            producto_nombre: producto.descripcion
+          }
         });
       }
 

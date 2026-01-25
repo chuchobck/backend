@@ -1,49 +1,105 @@
-# Dependencias
+# ===============================
+# DEPENDENCIAS
+# ===============================
 node_modules/
+**/node_modules/
 
-# Variables de entorno
+# ===============================
+# VARIABLES DE ENTORNO
+# ===============================
 .env
+.env.local
+.env.development
+.env.production
+.env*.local
 
-# Archivos generados por Prisma
+# Mantener .env.example
+!.env.example
+
+# ===============================
+# ARCHIVOS GENERADOS POR PRISMA
+# ===============================
 /generated/prisma
 
-# Archivos temporales y de prueba
-*.log
-*.tmp
-.DS_Store
-Thumbs.db
+# ===============================
+# BUILD / DIST
+# ===============================
+dist/
+build/
 
-# Archivos de desarrollo y debug
+# ===============================
+# SCRIPTS DE DESARROLLO/DEBUG (NO PRODUCCIÓN)
+# ===============================
 debug-*.js
 test-*.js
 check-*.js
 list-*.js
-all-counts.js
 fix-*.js
 get-*.js
 search-*.js
+create-*.js
+delete-*.js
+reset-*.js
+setup-*.js
+cleanup-*.js
 non-empty.js
+all-counts.js
 
-# Archivos JSON de prueba/desarrollo
+# ===============================
+# ARCHIVOS TEMPORALES Y LOGS
+# ===============================
+*.log
+*.tmp
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ===============================
+# ARCHIVOS JSON DE PRUEBA
+# ===============================
 cats.json
 counts.json
 mapping_data.txt
 
-# Thunder Client collections (opcional)
+# ===============================
+# THUNDER CLIENT / API TESTING
+# ===============================
 thunder-client-*.json
 
-# Backups de configuración
+# ===============================
+# BACKUPS
+# ===============================
 *.bak
+*.backup
 
-# Archivos de documentación temporal
+# ===============================
+# DOCUMENTACIÓN TEMPORAL
+# ===============================
 CHECKLIST_*.md
 RESUMEN_*.md
 OPTIMIZACIONES_*.md
 
-# Archivos públicos (imágenes) - opcional, descomentar si quieres versionar imágenes
-# public/logos/
-# public/productos/
-# public/Promociones/
+# ===============================
+# VERCEL / DEPLOY
+# ===============================
+.vercel/
 
-.vercel
-.env*.local
+# ===============================
+# ZIP / BACKUPS (CRÍTICO)
+# ===============================
+*.zip
+*.rar
+*.7z
+
+# ===============================
+# SISTEMA
+# ===============================
+.DS_Store
+Thumbs.db
+
+# ===============================
+# EDITOR / IDE
+# ===============================
+.vscode/*
+!.vscode/extensions.json
+.idea/

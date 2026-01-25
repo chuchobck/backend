@@ -72,19 +72,38 @@ export const listarFavoritos = async (req, res, next) => {
  */
 export const agregarFavorito = async (req, res, next) => {
   try {
-    const { clienteId, productoId } = req.body;
+    const { clienteId, usuarioId, productoId } = req.body;
     
-    if (!clienteId || !productoId) {
+    if ((!clienteId && !usuarioId) || !productoId) {
       return res.status(400).json({ 
         status: 'error', 
-        message: 'clienteId y productoId son requeridos', 
+        message: 'Se requiere clienteId o usuarioId, y productoId', 
         data: null 
       });
     }
 
+    // Si viene usuarioId, buscar el id_cliente asociado
+    let idCliente = clienteId ? parseInt(clienteId) : null;
+    
+    if (!idCliente && usuarioId) {
+      const cliente = await prisma.cliente.findUnique({
+        where: { id_usuario: parseInt(usuarioId) }
+      });
+      
+      if (!cliente) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'No se encontró un cliente asociado a este usuario',
+          data: null
+        });
+      }
+      
+      idCliente = cliente.id_cliente;
+    }
+
     // Validar que el cliente existe
     const clienteExiste = await prisma.cliente.findUnique({
-      where: { id_cliente: parseInt(clienteId) }
+      where: { id_cliente: idCliente }
     });
 
     if (!clienteExiste) {
@@ -115,7 +134,7 @@ export const agregarFavorito = async (req, res, next) => {
     const existente = await prisma.producto_favorito.findUnique({
       where: { 
         id_cliente_id_producto: {
-          id_cliente: parseInt(clienteId),
+          id_cliente: idCliente,
           id_producto: productoId
         }
       }
@@ -132,7 +151,7 @@ export const agregarFavorito = async (req, res, next) => {
     // Crear favorito
     const favorito = await prisma.producto_favorito.create({
       data: { 
-        id_cliente: parseInt(clienteId), 
+        id_cliente: idCliente, 
         id_producto: productoId 
       },
       include: {

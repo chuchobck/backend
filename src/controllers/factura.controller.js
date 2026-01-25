@@ -132,36 +132,101 @@ export const buscarFacturas = async (req, res, next) => {
 /**
  * F5.1 – Crear factura desde carrito (Checkout)
  * POST /api/v1/facturas
- * Body: { id_cliente, id_carrito, id_metodo_pago, id_sucursal }
  * 
  * REFACTORIZADO: Usa fn_ingresar_factura() de la BD
  */
 export const crearFactura = async (req, res, next) => {
   try {
-    const { id_cliente, id_carrito, id_metodo_pago, id_sucursal } = req.body;
+    const { id_cliente, id_carrito, id_metodo_pago, detalle_productos: detalle_productos_input } = req.body;
     const id_empleado = req.usuario?.id_empleado || null;
+    const id_usuario = req.usuario?.id_usuario || null;
 
-    // Validación mínima en Node.js
-    if (!id_cliente || !id_carrito || !id_metodo_pago || !id_sucursal) {
+    // Validación de parámetros requeridos
+    if (!id_cliente || !id_metodo_pago) {
       return res.status(400).json({
         status: 'error',
-        message: 'Parámetros requeridos: id_cliente, id_carrito, id_metodo_pago, id_sucursal',
+        message: 'Parámetros requeridos: id_cliente, id_metodo_pago',
         data: null
       });
     }
 
-    // Determinar canal de venta
+    // Determinar canal de venta basado en origen de datos
+    // POS: tiene id_empleado y envía detalle_productos directamente
+    // WEB: usa id_carrito y NO tiene id_empleado
     const canal_venta = id_empleado ? 'POS' : 'WEB';
+    
+    // Obtener IVA activo (12%)
+    const ivaActivo = await prisma.iva.findFirst({
+      where: {
+        estado: 'A',
+        fecha_inicio: { lte: new Date() },
+        OR: [
+          { fecha_fin: null },
+          { fecha_fin: { gte: new Date() } }
+        ]
+      },
+      orderBy: { fecha_inicio: 'desc' }
+    });
+
+    if (!ivaActivo) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'No hay IVA configurado para la fecha actual',
+        data: null
+      });
+    }
+
+    let detalle_productos;
+
+    // Determinar origen de los productos
+    if (detalle_productos_input && Array.isArray(detalle_productos_input) && detalle_productos_input.length > 0) {
+      // POS: productos vienen directamente en el body
+      detalle_productos = detalle_productos_input;
+    } else if (id_carrito) {
+      // WEB: obtener productos del carrito
+      const itemsCarrito = await prisma.carrito_detalle.findMany({
+        where: { 
+          id_carrito: id_carrito
+        },
+        select: {
+          id_producto: true,
+          cantidad: true
+        }
+      });
+
+      if (itemsCarrito.length === 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'El carrito está vacío',
+          data: null
+        });
+      }
+
+      detalle_productos = itemsCarrito.map(item => ({
+        id_producto: item.id_producto,
+        cantidad: item.cantidad
+      }));
+    } else {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Debe proporcionar id_carrito o detalle_productos',
+        data: null
+      });
+    }
 
     // 🔷 LLAMAR FUNCIÓN DE BD: fn_ingresar_factura()
+    // Parámetros: p_id_canal, p_id_cliente, p_id_metodo_pago, p_id_iva, 
+    //             p_detalle_productos, p_id_carrito, p_id_empleado, p_id_usuario
     const resultado = await prisma.$queryRaw`
       SELECT * FROM fn_ingresar_factura(
-        ${Number(id_cliente)}::INTEGER,
-        ${id_carrito}::UUID,
-        ${Number(id_metodo_pago)}::INTEGER,
-        ${Number(id_sucursal)}::INTEGER,
         ${canal_venta}::CHAR(3),
-        ${id_empleado}::INTEGER
+        ${Number(id_cliente)}::INTEGER,
+        ${Number(id_metodo_pago)}::INTEGER,
+        ${ivaActivo.id_iva}::INTEGER,
+        ${JSON.stringify(detalle_productos)}::JSONB,
+        ${id_carrito || null}::UUID,
+        ${id_empleado}::INTEGER,
+        ${id_usuario}::INTEGER
       )
     `;
 
@@ -175,11 +240,11 @@ export const crearFactura = async (req, res, next) => {
 
     const factura = resultado[0];
 
-    // Validar si BD retornó error
-    if (factura.error || factura.mensaje?.includes('Error')) {
+    // Validar si BD retornó error (resultado es false)
+    if (factura.resultado === false) {
       return res.status(400).json({
         status: 'error',
-        message: factura.mensaje || 'Error al crear factura',
+        message: 'Error al crear factura',
         data: null
       });
     }
@@ -187,160 +252,17 @@ export const crearFactura = async (req, res, next) => {
     return res.status(201).json({
       status: 'success',
       message: 'Factura creada correctamente',
-      data: factura
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-/**
- * F5.3 – Modificar factura abierta (solo estado EMI)
- * PUT /api/v1/facturas/:id
- * Body: { detalles: [{ id_producto, cantidad, precio_unitario? }] }
- */
-export const editarFacturaAbierta = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { detalles } = req.body;
-
-    if (!id) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'ID de factura es requerido',
-        data: null
-      });
-    }
-
-    if (!detalles || detalles.length === 0) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Debe incluir al menos un producto',
-        data: null
-      });
-    }
-
-    // Obtener factura
-    const factura = await prisma.factura.findUnique({
-      where: { id_factura: id },
-      include: {
-        detalle_factura: true,
-        iva: true
-      }
-    });
-
-    if (!factura) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'La factura no existe',
-        data: null
-      });
-    }
-
-    if (factura.estado !== 'EMI') {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Solo se pueden modificar facturas en estado EMI',
-        data: null
-      });
-    }
-
-    // Validar productos y calcular totales
-    let subtotal = 0;
-    const detallesValidados = [];
-
-    for (const item of detalles) {
-      const producto = await prisma.producto.findUnique({
-        where: { id_producto: item.id_producto }
-      });
-
-      if (!producto) {
-        return res.status(404).json({
-          status: 'error',
-          message: `Producto ${item.id_producto} no existe`,
-          data: null
-        });
-      }
-
-      const cantidad = Number(item.cantidad);
-      const precio_unitario = Number(item.precio_unitario || producto.precio_venta);
-
-      if (precio_unitario <= 0) {
-        return res.status(400).json({
-          status: 'error',
-          message: `Precio inválido para ${item.id_producto}`,
-          data: null
-        });
-      }
-
-      const itemSubtotal = cantidad * precio_unitario;
-      subtotal += itemSubtotal;
-
-      detallesValidados.push({
-        id_producto: item.id_producto,
-        cantidad,
-        precio_unitario: parseFloat(precio_unitario.toFixed(3)),
-        subtotal: parseFloat(itemSubtotal.toFixed(3))
-      });
-    }
-
-    // Calcular totales
-    const porcentajeIva = Number(factura.iva.porcentaje);
-    const valorIva = parseFloat((subtotal * porcentajeIva / 100).toFixed(3));
-    const total = parseFloat((subtotal + valorIva).toFixed(3));
-
-    // Transacción para actualizar
-    const resultado = await prisma.$transaction(async (tx) => {
-      // Eliminar detalles anteriores
-      await tx.detalle_factura.deleteMany({
-        where: { id_factura: id }
-      });
-
-      // Crear nuevos detalles
-      for (const detalle of detallesValidados) {
-        await tx.detalle_factura.create({
-          data: {
-            id_factura: id,
-            id_producto: detalle.id_producto,
-            cantidad: detalle.cantidad,
-            precio_unitario: detalle.precio_unitario,
-            subtotal: detalle.subtotal
-          }
-        });
-      }
-
-      // Actualizar factura
-      const facturaActualizada = await tx.factura.update({
-        where: { id_factura: id },
-        data: {
-          subtotal: parseFloat(subtotal.toFixed(3)),
-          total
-        },
-        include: {
-          detalle_factura: {
-            include: { producto: true }
-          }
-        }
-      });
-
-      return facturaActualizada;
-    });
-
-    return res.json({
-      status: 'success',
-      message: 'Factura actualizada correctamente',
       data: {
-        id_factura: resultado.id_factura,
-        subtotal: resultado.subtotal,
-        total: resultado.total,
-        estado: resultado.estado,
-        detalles: resultado.detalle_factura
+        id_factura: factura.id_factura_generada,
+        numero_factura: factura.id_factura_generada
       }
     });
   } catch (err) {
     next(err);
   }
 };
+
+
 
 /**
  * F5.2 – Anular factura
@@ -580,15 +502,6 @@ export const misPedidos = async (req, res, next) => {
             }
           }
         },
-        sucursal: {
-          select: {
-            id_sucursal: true,
-            nombre: true,
-            direccion: true,
-            telefono: true,
-            horario: true
-          }
-        },
         metodo_pago: {
           select: {
             nombre: true
@@ -613,7 +526,6 @@ export const misPedidos = async (req, res, next) => {
       }[factura.estado] || factura.estado,
       puede_anular: factura.estado === 'EMI', // Solo emitidas se pueden anular
       metodo_pago: factura.metodo_pago.nombre,
-      punto_retiro: factura.sucursal,
       productos: factura.detalle_factura.map(d => ({
         id_producto: d.id_producto,
         descripcion: d.producto.descripcion,
@@ -637,110 +549,7 @@ export const misPedidos = async (req, res, next) => {
   }
 };
 
-/**
- * GET /api/v1/facturas/pedidos-retiro?id_sucursal=1
- * Listar pedidos pendientes de retiro del e-commerce
- * Para uso en POS - permite al cajero ver pedidos a retirar
- */
-export const pedidosPendientesRetiro = async (req, res, next) => {
-  try {
-    const { id_sucursal } = req.query;
-    const id_empleado = req.usuario?.id_empleado;
 
-    // Si no se especifica sucursal, usar la del empleado
-    let sucursalFiltro = id_sucursal ? Number(id_sucursal) : null;
-    
-    if (!sucursalFiltro && id_empleado) {
-      const empleado = await prisma.empleado.findUnique({
-        where: { id_empleado },
-        select: { id_sucursal: true }
-      });
-      sucursalFiltro = empleado?.id_sucursal;
-    }
-
-    if (!sucursalFiltro) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'No se pudo determinar la sucursal',
-        data: null
-      });
-    }
-
-    // Buscar facturas de e-commerce pendientes de retiro
-    const pedidos = await prisma.factura.findMany({
-      where: {
-        id_canal: 'WEB',
-        id_sucursal: sucursalFiltro,
-        estado: 'EMI', // Emitidas, pendientes de entrega
-        fecha_retiro: null // Aún no retiradas
-      },
-      include: {
-        cliente: {
-          select: {
-            id_cliente: true,
-            nombre1: true,
-            nombre2: true,
-            apellido1: true,
-            apellido2: true,
-            ruc_cedula: true,
-            telefono: true
-          }
-        },
-        detalle_factura: {
-          include: {
-            producto: {
-              select: {
-                id_producto: true,
-                descripcion: true,
-                marca: {
-                  select: { nombre: true }
-                }
-              }
-            }
-          }
-        },
-        metodo_pago: {
-          select: { nombre: true }
-        }
-      },
-      orderBy: { fecha_emision: 'asc' } // Más antiguos primero
-    });
-
-    // Formatear para mejor UX en POS
-    const pedidosFormateados = pedidos.map(pedido => ({
-      id_factura: pedido.id_factura,
-      fecha_emision: pedido.fecha_emision,
-      cliente: {
-        id_cliente: pedido.cliente.id_cliente,
-        nombre_completo: [
-          pedido.cliente.nombre1,
-          pedido.cliente.nombre2,
-          pedido.cliente.apellido1,
-          pedido.cliente.apellido2
-        ].filter(Boolean).join(' '),
-        ruc_cedula: pedido.cliente.ruc_cedula,
-        telefono: pedido.cliente.telefono
-      },
-      total: parseFloat(pedido.total),
-      metodo_pago: pedido.metodo_pago.nombre,
-      cantidad_items: pedido.detalle_factura.length,
-      productos: pedido.detalle_factura.map(d => ({
-        descripcion: d.producto.descripcion,
-        marca: d.producto.marca?.nombre,
-        cantidad: d.cantidad
-      }))
-    }));
-
-    return res.json({
-      status: 'success',
-      message: 'Pedidos pendientes de retiro',
-      data: pedidosFormateados,
-      total_pendientes: pedidosFormateados.length
-    });
-  } catch (err) {
-    next(err);
-  }
-};
 
 /**
  * POST /api/v1/facturas/:id/marcar-retirado
@@ -799,11 +608,75 @@ export const marcarRetirado = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /api/v1/facturas/pedidos-retiro
+ * Obtener pedidos pendientes de retiro para POS
+ */
+export const pedidosPendientesRetiro = async (req, res, next) => {
+  try {
+    const pedidos = await prisma.factura.findMany({
+      where: {
+        id_canal: 'WEB',
+        estado: 'APR',
+        fecha_retiro: null
+      },
+      include: {
+        cliente: {
+          select: {
+            nombre1: true,
+            apellido1: true,
+            ruc_cedula: true,
+            telefono: true
+          }
+        },
+        detalle_factura: {
+          include: {
+            producto: {
+              select: {
+                descripcion: true,
+                codigo_barras: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { fecha_emision: 'desc' }
+    });
+
+    const pedidosFormateados = pedidos.map(factura => ({
+      id_factura: factura.id_factura,
+      numero_factura: factura.numero_factura,
+      fecha_emision: factura.fecha_emision,
+      total: parseFloat(factura.total),
+      cliente: {
+        nombre: `${factura.cliente.nombre1} ${factura.cliente.apellido1}`,
+        cedula: factura.cliente.ruc_cedula,
+        telefono: factura.cliente.telefono
+      },
+      productos: factura.detalle_factura.map(d => ({
+        descripcion: d.producto.descripcion,
+        codigo_barras: d.producto.codigo_barras,
+        cantidad: d.cantidad,
+        precio_unitario: parseFloat(d.precio_unitario)
+      })),
+      cantidad_items: factura.detalle_factura.length
+    }));
+
+    return res.json({
+      status: 'success',
+      message: 'Pedidos pendientes de retiro obtenidos',
+      data: pedidosFormateados,
+      total_pedidos: pedidosFormateados.length
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   listarFacturas,
   buscarFacturas,
   crearFactura,
-  editarFacturaAbierta,
   anularFactura,
   imprimirFactura,
   facturasCliente,

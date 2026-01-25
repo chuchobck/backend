@@ -138,12 +138,32 @@ export const buscarProductos = async (req, res, next) => {
       whereClause.estado = 'ACT'; // Por defecto solo activos
     }
 
-    // Búsqueda por descripción
+    // Búsqueda por descripción (también busca en categoría)
     if (descripcion) {
-      whereClause.descripcion = {
-        contains: descripcion,
-        mode: 'insensitive'
-      };
+      whereClause.OR = [
+        {
+          descripcion: {
+            contains: descripcion,
+            mode: 'insensitive'
+          }
+        },
+        {
+          categoria_producto: {
+            nombre: {
+              contains: descripcion,
+              mode: 'insensitive'
+            }
+          }
+        },
+        {
+          marca: {
+            nombre: {
+              contains: descripcion,
+              mode: 'insensitive'
+            }
+          }
+        }
+      ];
     }
 
     // Filtro por categoría
@@ -166,14 +186,6 @@ export const buscarProductos = async (req, res, next) => {
     // Filtro por volumen
     if (volumen) {
       whereClause.volumen = parseFloat(volumen);
-    }
-
-    // Filtro por origen
-    if (origen) {
-      whereClause.origen = {
-        contains: origen,
-        mode: 'insensitive'
-      };
     }
 
     // Solo productos con stock disponible
